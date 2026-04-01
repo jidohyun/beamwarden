@@ -14,6 +14,15 @@ It also owns the mirrored snapshot/reference data it executes against under `eli
 - `ClawCode.Application` — registries + dynamic supervisors for sessions and workflows.
 - Companion mirror helpers for the remaining lightweight Python concepts (`query`, `task`, cost hooks, dialogs, onboarding, REPL banner, and tool definitions).
 
+## Current cluster/daemon posture
+
+The control plane already supports distributed routing across connected BEAM nodes, but it should still be described as:
+
+- **shipped today:** resumable OTP workers plus multi-node routing
+- **not shipped yet:** quorum-backed ownership, daemon-first cluster continuity, and a dedicated cluster-coordinator supervision layer
+
+See `docs/elixir-cluster-daemon-review.md` for the code-quality review and the recommended hardening sequence.
+
 ## CLI surface
 
 Representative commands:

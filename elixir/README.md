@@ -60,11 +60,32 @@ The daemon persists its ledger to a per-node DETS file under `.port_sessions/clu
 
 This keeps single-node behavior unchanged while allowing local multi-node tests and distributed embeddings to coordinate through the same APIs.
 
+Current status: this is **distributed routing plus resumable OTP workers**, not yet a durable cluster daemon. The most current review note is in `../docs/elixir-cluster-daemon-review.md`.
+
+### What is solid today
+
+- connected BEAM nodes can route control-plane actions to a live owner node
+- sessions and workflows can be resumed from persisted snapshots
+- the OTP supervision layer is real and test-covered
+- single-node `mix claw ...` flows remain intact
+
+### What still needs to happen for a durable daemon
+
+1. harden ownership/failover beyond a single persisted `owner_node` string
+2. make a long-running daemon node the primary live coordination path
+3. introduce a stronger supervision tree for cluster coordination services
+
 Honest limits:
 
 - `mix claw ...` is still an ephemeral CLI entrypoint; it does **not** keep an always-on cluster alive after the command exits unless you run the VM itself as a long-lived node.
 - `cluster-connect` / `cluster-disconnect` only work when the current VM is already distributed (`--sname`, `--name`, or `Node.start/2`).
 - Quorum is based on the currently connected BEAM subcluster only; there is still no external consensus store or split-brain resolution beyond what the connected nodes can observe.
 - Session/workflow contents still resume from JSON snapshots, so durable routing metadata is stronger than durable payload storage when nodes do not share the same filesystem.
+
+Implementation references for these limits:
+
+- supervision tree: `lib/claw_code/application.ex`
+- routing/failover: `lib/claw_code/control_plane.ex`, `lib/claw_code/cluster.ex`
+- persisted ownership: `lib/claw_code/session_store.ex`, `lib/claw_code/workflow_store.ex`
 
 Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

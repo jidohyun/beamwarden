@@ -1,4 +1,4 @@
-# Claw Code — Elixir Workspace
+# Beamwarden — Elixir Workspace
 
 This is now the primary implementation workspace for the repository.
 
@@ -30,7 +30,7 @@ Run a long-lived daemon node:
 
 ```bash
 cd elixir
-mix claw daemon-run --name claw_code_daemon
+mix beamwarden daemon-run --name claw_code_daemon
 # add --longname for cross-host / FQDN operation
 ```
 
@@ -38,36 +38,37 @@ Talk to it from another shell:
 
 ```bash
 cd elixir
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw daemon-status
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw start-session --id smoke-session "review MCP tool"
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw session-status smoke-session
+CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden daemon-status
+CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden start-session --id smoke-session "review MCP tool"
+CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden session-status smoke-session
 ```
 
 If the daemon node uses a fully-qualified host (for example `claw_code_daemon@daemon.example.internal`), run both the daemon and clients in longname mode:
 
 ```bash
 # daemon host
-CLAW_DAEMON_COOKIE=clawsecret mix claw daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name claw_code_daemon --longname
 
 # remote client
-CLAW_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
-CLAW_DAEMON_COOKIE=clawsecret \
-CLAW_DAEMON_NAME_MODE=longnames \
-mix claw daemon-status
+BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+BEAMWARDEN_DAEMON_COOKIE=clawsecret \
+BEAMWARDEN_DAEMON_NAME_MODE=longnames \
+mix beamwarden daemon-status
 ```
 
 Use the same cookie on every participating node. Shortname mode remains the default for local/same-host workflows.
+Prefer `BEAMWARDEN_*` env vars; `CLAW_*` remains available as a compatibility fallback during this transition.
 
 Representative local commands:
 
 ```bash
 cd elixir
-mix claw summary
-mix claw manifest
-mix claw control-plane-status
-mix claw cluster-status
-mix claw start-workflow smoke-flow "Update README" "Update docs"
-mix claw workflow-status smoke-flow
+mix beamwarden summary
+mix beamwarden manifest
+mix beamwarden control-plane-status
+mix beamwarden cluster-status
+mix beamwarden start-workflow smoke-flow "Update README" "Update docs"
+mix beamwarden workflow-status smoke-flow
 ```
 
 ## Honest limits

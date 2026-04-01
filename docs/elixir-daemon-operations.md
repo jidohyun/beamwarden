@@ -2,13 +2,13 @@
 
 This guide documents the current daemon-first control-plane workflow in two modes:
 
-1. **single-host smoke tests** using `mix claw daemon-run`
+1. **single-host smoke tests** using `mix beamwarden daemon-run`
 2. **cross-host daemon/client operation** using explicit longnames and a shared cookie
 
 The current daemon bootstrap supports both:
 
-- local shortname smoke tests via `mix claw daemon-run`
-- longname-aware startup via `mix claw daemon-run --longname`
+- local shortname smoke tests via `mix beamwarden daemon-run`
+- longname-aware startup via `mix beamwarden daemon-run --longname`
 
 For more controlled production-like operation, you can still prestart the BEAM VM yourself with `--name` / `--cookie` and then boot the daemon inside that already-distributed node.
 
@@ -18,19 +18,19 @@ Use this when the daemon and clients are running on the same machine:
 
 ```bash
 cd elixir
-mix claw daemon-run --name claw_code_daemon --cookie clawcluster
+BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name claw_code_daemon --cookie clawcluster
 ```
 
 From another shell on the same host:
 
 ```bash
 cd elixir
-export CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s)
-export CLAW_DAEMON_COOKIE=clawcluster
+export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@$(hostname -s)
+export BEAMWARDEN_DAEMON_COOKIE=clawcluster
 
-mix claw daemon-status
-mix claw start-session --id smoke-session "review MCP tool"
-mix claw session-status smoke-session
+mix beamwarden daemon-status
+mix beamwarden start-session --id smoke-session "review MCP tool"
+mix beamwarden session-status smoke-session
 ```
 
 Notes:
@@ -54,7 +54,7 @@ Assumptions for the examples below:
 
 ```bash
 cd elixir
-CLAW_DAEMON_COOKIE=clawcluster mix claw daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name claw_code_daemon --longname
 ```
 
 At this point the daemon ledger should be live under `.port_sessions/cluster/<node>/ledger.dets`.
@@ -63,12 +63,12 @@ At this point the daemon ledger should be live under `.port_sessions/cluster/<no
 
 ```bash
 cd elixir
-export CLAW_DAEMON_NODE=claw_code_daemon@daemon1.example.com
-export CLAW_DAEMON_COOKIE=clawcluster
-export CLAW_DAEMON_NAME_MODE=longnames
+export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon1.example.com
+export BEAMWARDEN_DAEMON_COOKIE=clawcluster
+export BEAMWARDEN_DAEMON_NAME_MODE=longnames
 
-mix claw daemon-status
-mix claw start-session --id smoke-session "review MCP tool"
+mix beamwarden daemon-status
+mix beamwarden start-session --id smoke-session "review MCP tool"
 ```
 
 Expected daemon status indicators:
@@ -87,11 +87,11 @@ Any other client node that starts with a longname and the same cookie can point 
 
 ```bash
 cd elixir
-export CLAW_DAEMON_NODE=claw_code_daemon@daemon1.example.com
-export CLAW_DAEMON_COOKIE=clawcluster
-export CLAW_DAEMON_NAME_MODE=longnames
+export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon1.example.com
+export BEAMWARDEN_DAEMON_COOKIE=clawcluster
+export BEAMWARDEN_DAEMON_NAME_MODE=longnames
 
-mix claw session-status smoke-session
+mix beamwarden session-status smoke-session
 ```
 
 That proves the active control plane is going through the long-running daemon node rather than depending on the original client shell staying alive.
@@ -105,7 +105,7 @@ The daemon-first control plane is intentionally conservative:
 - then it falls back to reachable persisted ownership metadata
 - finally it uses deterministic `:erlang.phash2/2` routing across connected members
 
-If `CLAW_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix claw daemon-status` (or `ClawCode.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case.
+If `BEAMWARDEN_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix beamwarden daemon-status` (or `ClawCode.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case. The older `CLAW_*` env vars and `mix claw ...` remain available as compatibility fallbacks.
 
 ## Current limits
 

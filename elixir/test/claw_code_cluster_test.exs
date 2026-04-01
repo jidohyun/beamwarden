@@ -7,7 +7,7 @@ defmodule ClawCodeClusterTest do
     ensure_distributed_node!()
 
     peer_name = :peer.random_name(~c"claw_peer")
-    peer_args = [~c"-pa" | :code.get_path()]
+    peer_args = [~c"-setcookie", Atom.to_charlist(Node.get_cookie()), ~c"-pa" | :code.get_path()]
 
     {:ok, peer, peer_node} = :peer.start_link(%{name: peer_name, args: peer_args})
     true = Node.connect(peer_node)

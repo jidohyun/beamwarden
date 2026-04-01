@@ -21,6 +21,17 @@ defmodule ClawCodePortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
+  test "mix beamwarden alias runs the same summary surface" do
+    Mix.Task.reenable("beamwarden")
+
+    output =
+      capture_io(fn ->
+        Mix.Tasks.Beamwarden.run(["summary"])
+      end)
+
+    assert output =~ "Elixir Porting Workspace Summary"
+  end
+
   test "parity audit runs" do
     output = capture_io(fn -> assert 0 == ClawCode.CLI.main(["parity-audit"]) end)
     assert output =~ "Parity Audit"

@@ -164,11 +164,13 @@ defmodule ClawCode.Daemon do
   end
 
   def configured_node_label do
-    Application.get_env(:claw_code, :daemon_node) || System.get_env("CLAW_DAEMON_NODE")
+    Application.get_env(:claw_code, :daemon_node) ||
+      preferred_env("BEAMWARDEN_DAEMON_NODE", "CLAW_DAEMON_NODE")
   end
 
   def daemon_cookie do
-    Application.get_env(:claw_code, :daemon_cookie) || System.get_env("CLAW_DAEMON_COOKIE")
+    Application.get_env(:claw_code, :daemon_cookie) ||
+      preferred_env("BEAMWARDEN_DAEMON_COOKIE", "CLAW_DAEMON_COOKIE")
   end
 
   def configured_name_mode do
@@ -338,10 +340,14 @@ defmodule ClawCode.Daemon do
   end
 
   defp longname_env? do
-    case System.get_env("CLAW_DAEMON_NAME_MODE") do
+    case preferred_env("BEAMWARDEN_DAEMON_NAME_MODE", "CLAW_DAEMON_NAME_MODE") do
       value when value in ["long", "longname", "longnames"] -> true
       _ -> false
     end
+  end
+
+  defp preferred_env(primary, fallback) do
+    System.get_env(primary) || System.get_env(fallback)
   end
 
   defp longname_label?(nil), do: false

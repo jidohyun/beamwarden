@@ -35,17 +35,19 @@ See `docs/elixir-cluster-daemon-review.md` for the current review note and limit
 
 ```bash
 cd elixir
-mix claw daemon-status
-mix claw daemon-run --name claw_code_daemon --longname
-mix claw control-plane-status
-mix claw cluster-status
-mix claw start-session --id smoke-session "review MCP tool"
-mix claw submit-session smoke-session "review MCP tool"
-mix claw session-status smoke-session
-mix claw start-workflow smoke-flow "Update README" "Update docs"
-mix claw workflow-status smoke-flow
-mix claw advance-task smoke-flow 1 completed "done"
+mix beamwarden daemon-status
+mix beamwarden daemon-run --name claw_code_daemon --longname
+mix beamwarden control-plane-status
+mix beamwarden cluster-status
+mix beamwarden start-session --id smoke-session "review MCP tool"
+mix beamwarden submit-session smoke-session "review MCP tool"
+mix beamwarden session-status smoke-session
+mix beamwarden start-workflow smoke-flow "Update README" "Update docs"
+mix beamwarden workflow-status smoke-flow
+mix beamwarden advance-task smoke-flow 1 completed "done"
 ```
+
+`mix claw ...` remains available as a compatibility alias.
 
 ## Verification
 
@@ -64,14 +66,14 @@ Use longname mode when the daemon node is addressed with a fully-qualified host 
 ```bash
 # daemon host
 cd elixir
-CLAW_DAEMON_COOKIE=clawsecret mix claw daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name claw_code_daemon --longname
 
 # remote client
 cd elixir
-CLAW_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
-CLAW_DAEMON_COOKIE=clawsecret \
-CLAW_DAEMON_NAME_MODE=longnames \
-mix claw session-status smoke-session
+BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+BEAMWARDEN_DAEMON_COOKIE=clawsecret \
+BEAMWARDEN_DAEMON_NAME_MODE=longnames \
+mix beamwarden session-status smoke-session
 ```
 
-Use the same cookie and the same name mode on every participating node. Shortnames remain the default for same-host/local development.
+Use the same cookie and the same name mode on every participating node. Shortnames remain the default for same-host/local development. `CLAW_*` env vars remain supported as compatibility fallbacks.

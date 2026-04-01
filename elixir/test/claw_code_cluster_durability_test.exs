@@ -147,7 +147,8 @@ defmodule ClawCodeClusterDurabilityTest do
     {:ok, peer, peer_node} =
       :peer.start_link(%{
         name: String.to_atom("claw_peer_#{System.unique_integer([:positive])}"),
-        host: String.to_charlist(host_name())
+        host: String.to_charlist(host_name()),
+        args: [~c"-setcookie", Atom.to_charlist(Node.get_cookie())]
       })
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])

@@ -99,6 +99,7 @@ defmodule ClawCode.SessionServer do
       persisted_session_path: state.persisted_session_path,
       submits: state.submits,
       stop_reason: state.last_stop_reason || "none",
+      owner_node: ClawCode.Cluster.local_owner_label(),
       usage: %{
         input_tokens: state.engine.total_usage.input_tokens,
         output_tokens: state.engine.total_usage.output_tokens

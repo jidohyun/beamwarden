@@ -1,5 +1,5 @@
 defmodule ClawCodePortTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
 
@@ -222,6 +222,108 @@ defmodule ClawCodePortTest do
     assert tool_pool =~ "Tool Pool"
   end
 
+  test "companion cli commands surface the Elixir-first mirror helpers" do
+    dialogs = capture_io(fn -> assert 0 == ClawCode.CLI.main(["dialogs"]) end)
+    repl_banner = capture_io(fn -> assert 0 == ClawCode.CLI.main(["repl-banner"]) end)
+    default_tasks = capture_io(fn -> assert 0 == ClawCode.CLI.main(["default-tasks"]) end)
+    tool_defs = capture_io(fn -> assert 0 == ClawCode.CLI.main(["tool-definitions"]) end)
+
+    query_route =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["query-route", "review MCP tool", "--limit", "5"])
+      end)
+
+    assert dialogs =~ "control_plane"
+    assert repl_banner =~ "workflow-oriented"
+    assert default_tasks =~ "root-module-parity"
+    assert tool_defs =~ "control_plane"
+    assert query_route =~ "# Query Engine Route"
+    assert query_route =~ "Matches:"
+  end
+
+  test "control plane session lifecycle is exposed via mix claw" do
+    session_id = "session-" <> Integer.to_string(System.unique_integer([:positive]))
+    on_exit(fn -> maybe_stop_session(session_id) end)
+
+    start_output =
+      capture_io(fn ->
+        assert 0 ==
+                 ClawCode.CLI.main([
+                   "start-session",
+                   "--id",
+                   session_id,
+                   "review MCP tool"
+                 ])
+      end)
+
+    submit_output =
+      capture_io(fn ->
+        assert 0 ==
+                 ClawCode.CLI.main([
+                   "submit-session",
+                   session_id,
+                   "review MCP tool",
+                   "--limit",
+                   "5"
+                 ])
+      end)
+
+    status_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-status", session_id]) end)
+
+    control_plane =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
+
+    assert start_output =~ "session_id=#{session_id}"
+    assert start_output =~ "persisted_session_path="
+    assert submit_output =~ "stop_reason=completed"
+    assert status_output =~ "submits=2"
+    assert control_plane =~ "Sessions:"
+    assert control_plane =~ session_id
+  end
+
+  test "workflow lifecycle is exposed via mix claw" do
+    start_output =
+      capture_io(fn ->
+        assert 0 ==
+                 ClawCode.CLI.main([
+                   "start-workflow",
+                   "port-docs",
+                   "Update README",
+                   "Update docs"
+                 ])
+      end)
+
+    workflow_id =
+      start_output
+      |> String.split("\n", trim: true)
+      |> Enum.find(&String.starts_with?(&1, "workflow_id="))
+      |> String.replace_prefix("workflow_id=", "")
+
+    on_exit(fn -> maybe_stop_workflow(workflow_id) end)
+
+    advance_output =
+      capture_io(fn ->
+        assert 0 ==
+                 ClawCode.CLI.main([
+                   "advance-task",
+                   workflow_id,
+                   "task-1",
+                   "completed",
+                   "README refreshed"
+                 ])
+      end)
+
+    status_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
+
+    assert start_output =~ "name=port-docs"
+    assert start_output =~ "task-1"
+    assert advance_output =~ "README refreshed"
+    assert status_output =~ "workflow_id=#{workflow_id}"
+    assert status_output =~ "[completed]"
+  end
+
   test "mix claw surfaces non-zero exit code for failures" do
     {_output, status} =
       System.cmd("mix", ["claw", "show-tool", "DefinitelyMissingTool"],
@@ -229,5 +331,17 @@ defmodule ClawCodePortTest do
       )
 
     assert status == 1
+  end
+
+  defp maybe_stop_session(session_id) do
+    if Registry.lookup(ClawCode.SessionRegistry, session_id) != [] do
+      ClawCode.SessionServer.stop(session_id)
+    end
+  end
+
+  defp maybe_stop_workflow(workflow_id) do
+    if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
+      ClawCode.WorkflowServer.stop(workflow_id)
+    end
   end
 end

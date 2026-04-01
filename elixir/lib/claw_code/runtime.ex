@@ -155,7 +155,7 @@ defmodule ClawCode.Runtime do
         ClawCode.Tools.execute_tool(match.name, prompt).message
       end)
 
-    denials = infer_permission_denials(matches)
+    denials = permission_denials_for_matches(matches)
 
     {engine, result} =
       QueryEngine.submit_message(
@@ -228,7 +228,7 @@ defmodule ClawCode.Runtime do
     |> elem(1)
   end
 
-  defp infer_permission_denials(matches) do
+  def permission_denials_for_matches(matches) do
     Enum.reduce(matches, [], fn match, acc ->
       if match.kind == "tool" and String.contains?(String.downcase(match.name), "bash") do
         acc ++

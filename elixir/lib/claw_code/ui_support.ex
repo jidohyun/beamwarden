@@ -30,14 +30,17 @@ defmodule ClawCode.DialogLaunchers do
     [
       %ClawCode.DialogLauncher{name: "summary", description: "Launch the Markdown summary view"},
       %ClawCode.DialogLauncher{name: "parity_audit", description: "Launch the parity audit view"},
-      %ClawCode.DialogLauncher{name: "control_plane", description: "Launch the OTP control-plane view"}
+      %ClawCode.DialogLauncher{
+        name: "control_plane",
+        description: "Launch the OTP control-plane view"
+      }
     ]
   end
 
   def render do
-    ClawCode.InteractiveHelpers.bulletize(
-      Enum.map(default_dialogs(), &"#{&1.name} — #{&1.description}")
-    )
+    default_dialogs()
+    |> Enum.map(&"#{&1.name} — #{&1.description}")
+    |> ClawCode.InteractiveHelpers.bulletize()
   end
 end
 
@@ -45,8 +48,7 @@ defmodule ClawCode.InteractiveHelpers do
   @moduledoc false
 
   def bulletize(items) when is_list(items) do
-    Enum.map_join(items, "
-", &"- #{&1}")
+    Enum.map_join(items, "\n", &"- #{&1}")
   end
 end
 
@@ -87,7 +89,6 @@ defmodule ClawCode.InkPanel do
 
   def render(text) do
     border = String.duplicate("=", 40)
-    Enum.join([border, text, border], "
-")
+    Enum.join([border, text, border], "\n")
   end
 end

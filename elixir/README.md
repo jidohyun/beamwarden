@@ -1,21 +1,41 @@
-# ClawCode
+# Elixir Structural Mirror for claw-code
 
-**TODO: Add description**
+`elixir/` is a Mix-based Elixir porting workspace that mirrors the current Python port strategy used in this repository.
 
-## Installation
+It is intentionally **not** a full runtime-equivalent reimplementation of Claude Code. Instead, it preserves:
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `claw_code_elixir` to your list of dependencies in `mix.exs`:
+- snapshot-backed command and tool inventories
+- manifest and parity-audit reporting
+- setup/bootstrap summaries
+- routing and synthetic turn-loop behavior
+- session persistence and permission filtering
+- ExUnit coverage for the mirrored CLI surface
 
-```elixir
-def deps do
-  [
-    {:claw_code_elixir, "~> 0.1.0"}
-  ]
-end
+## Verification
+
+```bash
+cd elixir
+mix format --check-formatted
+mix compile
+mix test
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/claw_code_elixir>.
+## CLI
 
+```bash
+cd elixir
+mix claw summary
+mix claw manifest
+mix claw parity-audit
+mix claw bootstrap "review MCP tool"
+```
+
+## Scope
+
+This workspace follows the same conservative porting approach as the Python tree:
+
+- it reuses `src/reference_data/*.json`
+- it mirrors structure and control flow
+- it does **not** claim full Claude Code runtime parity
+
+For deeper executable runtime behavior, this repository still leans on the Rust workspace under `rust/`.

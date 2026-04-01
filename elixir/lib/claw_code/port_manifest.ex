@@ -3,7 +3,7 @@ defmodule ClawCode.PortManifest do
 
   alias ClawCode.Subsystem
 
-  defstruct [:src_root, :total_elixir_files, top_level_modules: []]
+  defstruct src_root: nil, total_elixir_files: nil, top_level_modules: []
 
   @notes %{
     "application.ex" => "OTP application bootstrap",
@@ -59,7 +59,11 @@ defmodule ClawCode.PortManifest do
       end)
       |> Enum.sort_by(fn subsystem -> {-subsystem.file_count, subsystem.name} end)
 
-    %__MODULE__{src_root: root, total_elixir_files: length(files), top_level_modules: top_level_modules}
+    %__MODULE__{
+      src_root: root,
+      total_elixir_files: length(files),
+      top_level_modules: top_level_modules
+    }
   end
 
   def to_markdown(%__MODULE__{} = manifest) do

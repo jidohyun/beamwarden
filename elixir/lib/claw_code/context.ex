@@ -17,7 +17,7 @@ defmodule ClawCode.Context do
 
   alias ClawCode.PortContext
 
-  def build(base \\ ClawCode.project_root()) do
+  def build(_base \\ ClawCode.project_root()) do
     source_root = ClawCode.source_root()
     tests_root = ClawCode.test_root()
     assets_root = ClawCode.assets_root()

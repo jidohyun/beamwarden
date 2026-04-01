@@ -65,13 +65,14 @@ I've been deeply interested in **harness engineering** — studying how agent sy
 
 ## Porting Status
 
-The main source tree is now Python-first.
+The main source tree is now Python-first, with an Elixir structural mirror alongside it.
 
 - `src/` contains the active Python porting workspace
 - `tests/` verifies the current Python workspace
+- `elixir/` contains a Mix-based Elixir structural mirror of the Python port
 - the exposed snapshot is no longer part of the tracked repository state
 
-The current Python workspace is not yet a complete one-to-one replacement for the original system, but the primary implementation surface is now Python.
+The current Python workspace is not yet a complete one-to-one replacement for the original system, and the Elixir workspace is intentionally narrower: it mirrors CLI shape, inventories, setup/bootstrap flows, routing, session persistence, and parity evidence, but it is **not** runtime-equivalent to Claude Code.
 
 ## How the Claude Code port maps into this Python tree
 
@@ -142,6 +143,9 @@ This repository now focuses on Python porting work instead.
 │   ├── task.py
 │   └── tools.py
 ├── tests/                              # Python verification
+├── elixir/                             # Elixir structural mirror (Mix project + ExUnit)
+│   ├── lib/claw_code
+│   └── test
 ├── assets/omx/                         # OmX workflow screenshots
 ├── 2026-03-09-is-legal-the-same-as-legitimate-ai-reimplementation-and-the-erosion-of-copyleft.md
 └── README.md
@@ -190,6 +194,34 @@ Run the parity audit against the local ignored archive (when present):
 python3 -m src.main parity-audit
 ```
 
+## Elixir Structural Mirror Quickstart
+
+The Elixir port lives under `elixir/` and mirrors the Python workspace at the metadata/control-flow level rather than reimplementing the full runtime. It currently includes:
+
+- a Mix CLI task (`mix claw ...`) for summary, manifest, parity-audit, routing, bootstrap, turn-loop, session, and mode-placeholder commands
+- snapshot-backed command/tool inventories sourced from `src/reference_data/*.json`
+- parity evidence against the archived root-file/directory surface plus the shared command/tool snapshots
+- ExUnit coverage for manifest generation, CLI execution, routing/bootstrap/session skeletons, permissions filtering, and mirrored registry execution
+
+Run the Elixir verification flow:
+
+```bash
+cd elixir
+mix format --check-formatted
+mix compile
+mix test
+```
+
+Try the Elixir CLI surface:
+
+```bash
+cd elixir
+mix claw summary
+mix claw manifest
+mix claw parity-audit
+mix claw bootstrap "review MCP tool"
+```
+
 Inspect mirrored command/tool inventories:
 
 ```bash
@@ -199,7 +231,7 @@ python3 -m src.main tools --limit 10
 
 ## Current Parity Checkpoint
 
-The port now mirrors the archived root-entry file surface, top-level subsystem names, and command/tool inventories much more closely than before. However, it is **not yet** a full runtime-equivalent replacement for the original TypeScript system; the Python tree still contains fewer executable runtime slices than the archived source.
+The port now mirrors the archived root-entry file surface, top-level subsystem names, and command/tool inventories much more closely than before. However, neither port is yet a full runtime-equivalent replacement for the original TypeScript system: the Python tree still contains fewer executable runtime slices than the archived source, and the Elixir tree is currently a metadata/control-flow mirror of the Python workspace rather than a production runtime.
 
 
 ## Built with `oh-my-codex`

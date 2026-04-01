@@ -35,10 +35,12 @@ defmodule ClawCode.Commands do
 
     @ported_commands
     |> maybe_reject(fn module ->
-      not include_plugin_commands and String.contains?(String.downcase(module.source_hint), "plugin")
+      not include_plugin_commands and
+        String.contains?(String.downcase(module.source_hint), "plugin")
     end)
     |> maybe_reject(fn module ->
-      not include_skill_commands and String.contains?(String.downcase(module.source_hint), "skills")
+      not include_skill_commands and
+        String.contains?(String.downcase(module.source_hint), "skills")
     end)
   end
 

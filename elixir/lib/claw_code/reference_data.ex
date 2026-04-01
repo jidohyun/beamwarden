@@ -26,13 +26,18 @@ defmodule ClawCode.ReferenceData do
     end)
   end
 
-  defp read_json(name) when is_binary(name) and not String.contains?(name, "/") do
-    ClawCode.reference_data_root()
-    |> Path.join(name)
-    |> read_json()
+  defp read_json(name) when is_binary(name) do
+    path =
+      if String.contains?(name, "/") do
+        name
+      else
+        Path.join(ClawCode.reference_data_root(), name)
+      end
+
+    read_json_path(path)
   end
 
-  defp read_json(path) do
+  defp read_json_path(path) do
     path
     |> File.read!()
     |> JSON.decode!()

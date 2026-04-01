@@ -11,6 +11,7 @@ defmodule ClawCode.ToolPermissionContext do
 
   def blocks?(%__MODULE__{} = context, tool_name) do
     lowered = String.downcase(tool_name)
+
     MapSet.member?(context.deny_names, lowered) or
       Enum.any?(context.deny_prefixes, &String.starts_with?(lowered, &1))
   end

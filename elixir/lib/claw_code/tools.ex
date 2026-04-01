@@ -40,7 +40,9 @@ defmodule ClawCode.Tools do
     permission_context = Keyword.get(opts, :permission_context)
 
     @ported_tools
-    |> maybe_filter(simple_mode, fn module -> module.name in ["BashTool", "FileReadTool", "FileEditTool"] end)
+    |> maybe_filter(simple_mode, fn module ->
+      module.name in ["BashTool", "FileReadTool", "FileEditTool"]
+    end)
     |> maybe_reject(fn module ->
       not include_mcp and
         (String.contains?(String.downcase(module.name), "mcp") or
@@ -63,7 +65,13 @@ defmodule ClawCode.Tools do
   def execute_tool(name, payload \\ "") do
     case get_tool(name) do
       nil ->
-        %ToolExecution{name: name, source_hint: "", payload: payload, handled: false, message: "Unknown mirrored tool: #{name}"}
+        %ToolExecution{
+          name: name,
+          source_hint: "",
+          payload: payload,
+          handled: false,
+          message: "Unknown mirrored tool: #{name}"
+        }
 
       module ->
         %ToolExecution{

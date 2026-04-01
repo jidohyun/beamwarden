@@ -5,7 +5,7 @@ end
 
 defmodule ClawCode.PortingModule do
   @moduledoc false
-  defstruct [:name, :responsibility, :source_hint, status: "planned"]
+  defstruct name: nil, responsibility: nil, source_hint: nil, status: "planned"
 end
 
 defmodule ClawCode.PermissionDenial do

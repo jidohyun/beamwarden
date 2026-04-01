@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Beamwarden do
   use Mix.Task
 
-  @shortdoc "Run the Beamwarden CLI alias"
+  @shortdoc "Run the preferred Beamwarden CLI"
   @requirements ["app.start"]
 
   @impl true

@@ -7,6 +7,10 @@
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
+# Language server and local session artifacts.
+/.elixir_ls/
+/.port_sessions/
+
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
 
@@ -21,4 +25,3 @@ erl_crash.dump
 
 # Ignore package tarball (built via "mix hex.build").
 claw_code_elixir-*.tar
-

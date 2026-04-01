@@ -32,6 +32,24 @@ defmodule BeamwardenPortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
+  test "mix claw compatibility alias runs the same summary surface" do
+    Mix.Task.reenable("claw")
+
+    output =
+      capture_io(fn ->
+        Mix.Tasks.Claw.run(["summary"])
+      end)
+
+    assert output =~ "Elixir Porting Workspace Summary"
+  end
+
+  test "repl launcher messaging prefers beamwarden while keeping claw compatibility" do
+    assert Beamwarden.ReplLauncher.launch_message() =~ "mix beamwarden summary"
+    assert Beamwarden.ReplLauncher.launch_message() =~ "mix claw summary"
+    assert Beamwarden.ReplLauncher.build_banner() =~ "mix beamwarden summary"
+    assert Beamwarden.ReplLauncher.build_banner() =~ "mix claw summary"
+  end
+
   test "app identity helper keeps beamwarden as the live runtime app" do
     assert Beamwarden.AppIdentity.runtime_app() == :beamwarden
     assert Beamwarden.AppIdentity.legacy_app() == :claw_code

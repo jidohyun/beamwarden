@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Claw do
   use Mix.Task
 
-  @shortdoc "Run the Elixir structural mirror CLI"
+  @shortdoc "Run the Beamwarden CLI compatibility alias"
   @requirements ["app.start"]
 
   @impl true

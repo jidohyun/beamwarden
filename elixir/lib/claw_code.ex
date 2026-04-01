@@ -46,11 +46,8 @@ defmodule ClawCode do
   end
 
   def cluster_node_root do
-    node_label =
-      if Node.alive?(), do: Atom.to_string(node()), else: "local"
-
     sanitized =
-      node_label
+      cluster_storage_label()
       |> String.replace(~r/[^a-zA-Z0-9._-]/u, "_")
 
     Path.join(cluster_root(), sanitized)
@@ -58,6 +55,22 @@ defmodule ClawCode do
 
   def cluster_ledger_path do
     Path.join(cluster_node_root(), "ledger.dets")
+  end
+
+  def cluster_storage_label do
+    key = {__MODULE__, :cluster_storage_label}
+
+    case :persistent_term.get(key, :undefined) do
+      :undefined ->
+        label =
+          if Node.alive?(), do: Atom.to_string(node()), else: "local"
+
+        :persistent_term.put(key, label)
+        label
+
+      label ->
+        label
+    end
   end
 
   def session_path(session_id) do

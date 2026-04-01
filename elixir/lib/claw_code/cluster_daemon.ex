@@ -342,6 +342,7 @@ defmodule ClawCode.ClusterDaemon do
     if current == nil or fresher?(record, current) or equivalent_owner?(record, current) do
       true = :ets.insert(state.table, {key, record})
       :ok = :dets.insert(state.dets, {key, record})
+      :ok = :dets.sync(state.dets)
       record
     else
       current

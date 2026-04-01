@@ -79,7 +79,8 @@ defmodule ClawCode.ControlPlane do
   def add_workflow_step(workflow_id, title, description \\ nil) do
     target = resolve_workflow_node(workflow_id)
 
-    with {:ok, result} <- call_node(target, :add_workflow_step_local, [workflow_id, title, description]) do
+    with {:ok, result} <-
+           call_node(target, :add_workflow_step_local, [workflow_id, title, description]) do
       result
     end
   end
@@ -273,6 +274,12 @@ defmodule ClawCode.ControlPlane do
   def session_route_node(session_id), do: resolve_session_node(session_id)
   def workflow_route_node(workflow_id), do: resolve_workflow_node(workflow_id)
 
+  def session_running?(session_id),
+    do: Registry.lookup(ClawCode.SessionRegistry, session_id) != []
+
+  def workflow_running?(workflow_id),
+    do: Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != []
+
   defp workflow_status(steps) do
     cond do
       Enum.any?(steps, &(&1["status"] == "failed")) -> "failed"
@@ -330,9 +337,6 @@ defmodule ClawCode.ControlPlane do
     end
   end
 
-  defp session_running?(session_id), do: Registry.lookup(ClawCode.SessionRegistry, session_id) != []
-  defp workflow_running?(workflow_id), do: Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != []
-
   defp stored_owner_node(nil), do: nil
 
   defp stored_owner_node(owner_node) do
@@ -342,9 +346,7 @@ defmodule ClawCode.ControlPlane do
   end
 
   defp call_node(target, function, args) do
-    with {:ok, result} <- Cluster.rpc_call(target, __MODULE__, function, args) do
-      result
-    end
+    Cluster.rpc_call(target, __MODULE__, function, args)
   end
 
   defp normalize_start({:ok, pid}), do: {:ok, pid}

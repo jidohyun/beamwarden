@@ -18,7 +18,9 @@ defmodule ClawCode.Cluster do
     if Node.alive?(), do: Enum.sort([node() | Node.list()]), else: [node()]
   end
 
-  def reachable_node?(target) when is_binary(target), do: target |> parse_owner_node() |> reachable_node?()
+  def reachable_node?(target) when is_binary(target),
+    do: target |> parse_owner_node() |> reachable_node?()
+
   def reachable_node?(nil), do: false
   def reachable_node?(target) when target == node(), do: true
   def reachable_node?(target) when is_atom(target), do: Node.alive?() and target in Node.list()
@@ -67,22 +69,20 @@ defmodule ClawCode.Cluster do
     end
   end
 
-  def rpc_call(target, module, function, args, timeout \\ @rpc_timeout)
-
-  def rpc_call(target, module, function, args, _timeout) when target == node() or not Node.alive?() do
-    try do
-      {:ok, apply(module, function, args)}
-    rescue
-      error -> {:error, {:local_call_failed, Exception.message(error)}}
-    catch
-      kind, reason -> {:error, {:local_call_failed, {kind, reason}}}
-    end
-  end
-
-  def rpc_call(target, module, function, args, timeout) do
-    case :rpc.call(target, module, function, args, timeout) do
-      {:badrpc, reason} -> {:error, {:rpc, target, reason}}
-      result -> {:ok, result}
+  def rpc_call(target, module, function, args, timeout \\ @rpc_timeout) do
+    if target == node() or not Node.alive?() do
+      try do
+        {:ok, apply(module, function, args)}
+      rescue
+        error -> {:error, {:local_call_failed, Exception.message(error)}}
+      catch
+        kind, reason -> {:error, {:local_call_failed, {kind, reason}}}
+      end
+    else
+      case :rpc.call(target, module, function, args, timeout) do
+        {:badrpc, reason} -> {:error, {:rpc, target, reason}}
+        result -> {:ok, result}
+      end
     end
   end
 
@@ -113,7 +113,8 @@ defmodule ClawCode.Cluster do
       "routing_strategy=#{status.routing_strategy}",
       if(
         status.distributed?,
-        do: "limit=ephemeral CLI invocations do not keep a BEAM cluster alive after the command exits",
+        do:
+          "limit=ephemeral CLI invocations do not keep a BEAM cluster alive after the command exits",
         else:
           "limit=start the VM with --sname/--name (or Node.start/2) before using cluster-connect/disconnect"
       )

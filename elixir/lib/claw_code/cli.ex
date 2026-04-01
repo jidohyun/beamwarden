@@ -90,8 +90,12 @@ defmodule ClawCode.CLI do
 
   def run(["cluster-connect", target]) do
     case ClawCode.Cluster.connect(target) do
-      {:ok, result} -> {:ok, render_cluster_action("Cluster Connect", result)}
-      {:error, result} when is_map(result) -> {:error, render_cluster_action("Cluster Connect", result)}
+      {:ok, result} ->
+        {:ok, render_cluster_action("Cluster Connect", result)}
+
+      {:error, result} when is_map(result) ->
+        {:error, render_cluster_action("Cluster Connect", result)}
+
       {:error, :local_node_not_distributed} ->
         {:error, "Cluster connect requires a distributed node; start with --sname/--name first"}
     end
@@ -99,10 +103,15 @@ defmodule ClawCode.CLI do
 
   def run(["cluster-disconnect", target]) do
     case ClawCode.Cluster.disconnect(target) do
-      {:ok, result} -> {:ok, render_cluster_action("Cluster Disconnect", result)}
-      {:error, result} when is_map(result) -> {:error, render_cluster_action("Cluster Disconnect", result)}
+      {:ok, result} ->
+        {:ok, render_cluster_action("Cluster Disconnect", result)}
+
+      {:error, result} when is_map(result) ->
+        {:error, render_cluster_action("Cluster Disconnect", result)}
+
       {:error, :local_node_not_distributed} ->
-        {:error, "Cluster disconnect requires a distributed node; start with --sname/--name first"}
+        {:error,
+         "Cluster disconnect requires a distributed node; start with --sname/--name first"}
 
       {:error, :cannot_disconnect_current_node} ->
         {:error, "Cannot disconnect the current node"}

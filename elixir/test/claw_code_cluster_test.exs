@@ -6,14 +6,23 @@ defmodule ClawCodeClusterTest do
   setup_all do
     ensure_distributed_node!()
 
-    peer_name = :"claw-peer-#{System.unique_integer([:positive])}"
-    args = ["-pa" | Enum.map(:code.get_path(), &List.to_string/1)]
+    peer_name = :peer.random_name(~c"claw_peer")
+    peer_args = [~c"-pa" | :code.get_path()]
 
-    {:ok, peer, peer_node} = :peer.start_link(%{name: peer_name, args: args})
+    {:ok, peer, peer_node} = :peer.start_link(%{name: peer_name, args: peer_args})
+    true = Node.connect(peer_node)
     :ok = ensure_peer_started(peer_node)
 
     on_exit(fn ->
-      :peer.stop(peer)
+      if is_pid(peer) and Process.alive?(peer) do
+        try do
+          :peer.stop(peer)
+        catch
+          :exit, _reason -> :ok
+        end
+      else
+        :ok
+      end
     end)
 
     %{peer: peer, peer_node: peer_node}
@@ -64,8 +73,15 @@ defmodule ClawCodeClusterTest do
         assert 0 == ClawCode.CLI.main(["cluster-status"])
       end)
 
+    connect_output =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["cluster-connect", Atom.to_string(peer_node)])
+      end)
+
     assert cluster_output =~ "distributed=true"
     assert cluster_output =~ Atom.to_string(peer_node)
+    assert connect_output =~ "Cluster Connect"
+    assert connect_output =~ Atom.to_string(peer_node)
   end
 
   defp ensure_distributed_node! do
@@ -76,13 +92,12 @@ defmodule ClawCodeClusterTest do
     else
       name = :"claw-test-#{System.unique_integer([:positive])}"
       {:ok, _pid} = Node.start(name, :shortnames)
-      Node.set_cookie(:claw_cluster_cookie)
       :ok
     end
   end
 
   defp ensure_peer_started(peer_node) do
-    case :rpc.call(peer_node, Application, :ensure_all_started, [:claw_code]) do
+    case :rpc.call(peer_node, :application, :ensure_all_started, [:claw_code]) do
       {:ok, _apps} -> :ok
       {:badrpc, reason} -> raise "failed to start claw_code on #{peer_node}: #{inspect(reason)}"
       other -> raise "unexpected peer start result: #{inspect(other)}"
@@ -104,7 +119,10 @@ defmodule ClawCodeClusterTest do
       ClawCode.SessionServer.stop(session_id)
     end
 
-    :rpc.call(peer_node, ClawCode.SessionServer, :stop, [session_id])
+    if :rpc.call(peer_node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) != [] do
+      :rpc.call(peer_node, ClawCode.SessionServer, :stop, [session_id])
+    end
+
     File.rm(Path.join(ClawCode.session_root(), "#{session_id}.json"))
   end
 
@@ -113,7 +131,10 @@ defmodule ClawCodeClusterTest do
       ClawCode.WorkflowServer.stop(workflow_id)
     end
 
-    :rpc.call(peer_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+    if :rpc.call(peer_node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) != [] do
+      :rpc.call(peer_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+    end
+
     File.rm(ClawCode.workflow_path(workflow_id))
   end
 end

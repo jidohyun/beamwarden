@@ -7,4 +7,4 @@ The top-level `reference/` directory keeps the earlier companion implementations
 - `reference/python/` — the original clean-room Python mirror subtree
 - `reference/rust/` — the Rust runtime/reference subtree
 
-These trees are retained for reference and comparison. The primary developer workflow — including the mirrored snapshot/reference data used by the active workspace — now lives under `elixir/`.
+These trees are retained for reference and comparison only. The primary developer workflow and verification flow live under `elixir/`.

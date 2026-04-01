@@ -93,7 +93,7 @@ This repository currently mirrors **architecture, inventory, and control-flow sh
 
 ### 2. Command, tool, permissions, and control-flow porting
 
-- **Command surface:** `elixir/lib/claw_code/commands.ex` loads `elixir/priv/reference_data/commands_snapshot.json` and exposes lookup, filtering, and shim execution helpers. This is an inventory mirror of the archived command graph, not a full Elixir reimplementation of every command.
+- **Command surface:** `elixir/lib/claw_code/commands.ex` loads the Elixir-owned snapshot copy in `elixir/priv/reference_data/commands_snapshot.json` and exposes lookup, filtering, and shim execution helpers. This remains an inventory mirror of the archived command graph, not a full Elixir reimplementation of every command.
 - **Tool surface:** `elixir/lib/claw_code/tools.ex` does the same for `elixir/priv/reference_data/tools_snapshot.json`, including simple-mode filtering, MCP exclusion switches, and permission-context filtering.
 - **Execution registry:** `elixir/lib/claw_code/execution_registry.ex` wraps those mirrored command/tool entries so the runtime can “execute” them as descriptive shims during bootstrap and route simulations.
 - **Permissions model:** `elixir/lib/claw_code/permissions.ex` implements deny-name / deny-prefix filtering over mirrored tool metadata.
@@ -137,7 +137,7 @@ This repository now focuses on clean-room porting work instead, with the Elixir 
 The Elixir port lives under `elixir/` and is the primary workspace for this repository. It currently includes:
 
 - a Mix CLI task (`mix claw ...`) for summary, manifest, parity-audit, routing, bootstrap, turn-loop, session, workflow, and mode-placeholder commands
-- snapshot-backed command/tool inventories sourced from Elixir-owned files in `elixir/priv/reference_data/*.json`
+- snapshot-backed command/tool inventories copied into `elixir/priv/reference_data/*.json`
 - OTP-native control-plane supervision for resumable sessions and persisted workflows/tasks
 - parity evidence against the archived root-file/directory surface plus the shared command/tool snapshots
 - supervised session/workflow primitives backed by OTP + persisted snapshot files
@@ -191,6 +191,8 @@ The original clean-room Python mirror now lives under `reference/python/`. It re
 - the first-pass port that established the mirror strategy
 - a reference implementation for manifest / parity / routing concepts
 - a smaller historical comparison target for the Elixir workspace
+
+Elixir now owns its checked-in snapshot fixtures under `elixir/priv/reference_data/`, so the Python subtree is a comparison/reference workspace rather than an input required for `mix compile` or `mix test`.
 
 You can still inspect it with:
 

@@ -1,4 +1,4 @@
-# Evidence for Claude Code → Python Port Analysis
+# Evidence for the Python Companion Port Analysis
 
 This appendix captures the concrete command outputs used to support `docs/claude-code-port-analysis.md`.
 

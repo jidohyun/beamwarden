@@ -27,7 +27,7 @@
 </p>
 
 > [!IMPORTANT]
-> `elixir/` is now the primary workspace for this repository. Use `cd elixir && mix ...` for the main verification and smoke-check flow. Python and Rust remain in-tree as companion/reference layers while the Elixir control-plane story continues to expand.
+> **Elixir is now the primary workspace** for this repository. The active developer-facing surface lives under `elixir/` with Mix/OTP-native session and workflow orchestration, while `src/` and `rust/` remain companion/reference layers.
 
 > If you find this work useful, consider [sponsoring @instructkr on GitHub](https://github.com/sponsors/instructkr) to support continued open-source harness engineering research.
 
@@ -65,15 +65,15 @@ I've been deeply interested in **harness engineering** — studying how agent sy
 
 ## Porting Status
 
-The repository is now best understood as an **Elixir-port-first clean-room mirror** with Python and Rust companion workspaces.
+The repository is now best understood as an **Elixir-first clean-room port repository** with Python and Rust companion workspaces.
 
-- `elixir/` contains the active Mix-based Elixir structural mirror
-- `src/` contains the earlier Python structural mirror
-- `tests/` verifies the Python workspace
-- `rust/` continues the deeper executable runtime effort
+- `elixir/` contains the active Mix/OTP workspace and the primary `mix claw` surface
+- `src/` contains the earlier Python structural mirror for reference/comparison
+- `tests/` verifies the Python companion workspace
+- `rust/` remains a companion runtime/reference effort
 - the exposed snapshot is no longer part of the tracked repository state
 
-The Elixir workspace is intentionally conservative: it mirrors CLI shape, inventories, setup/bootstrap flows, routing, session persistence, and parity evidence, but it is **not** runtime-equivalent to Claude Code.
+The Elixir workspace is intentionally conservative but now materially richer than a pure metadata mirror: it preserves CLI shape, inventories, setup/bootstrap flows, routing, session persistence, parity evidence, and **OTP-native control-plane supervision for sessions and workflows**. It is still **not** runtime-equivalent to Claude Code.
 
 Today the shipped BEAM layer covers both the structural mirror and a lightweight OTP-native control-plane slice: supervised session workers, persisted session snapshots, workflow/task coordination, and CLI commands that expose those primitives. This is still not a full Claude Code runtime, but it is now more than a metadata-only mirror.
 
@@ -83,12 +83,12 @@ This repository currently mirrors **architecture, inventory, and control-flow sh
 
 ### 1. CLI and runtime architecture mapping
 
-- **CLI entrypoint:** `elixir/lib/mix/tasks/claw.ex` exposes the public Mix task surface, and `elixir/lib/claw_code/cli.ex` handles reporting (`summary`, `manifest`, `parity-audit`, `setup-report`, `bootstrap-graph`, `command-graph`, `tool-pool`), routing/bootstrap smoke checks, control-plane commands (`session-*`, `workflow-*`), mode placeholders, and shim execution commands.
+- **CLI entrypoint:** `elixir/lib/mix/tasks/claw.ex` exposes the public Mix task surface, and `elixir/lib/claw_code/cli.ex` handles summary, manifest, parity-audit, bootstrap, routing, turn-loop, control-plane, workflow, session, mode-placeholder, and shim execution commands.
 - **Runtime orchestration:** `elixir/lib/claw_code/runtime.ex` is the main Claude-Code-style control-flow mirror. It routes prompts across mirrored command/tool inventories, builds a runtime session, records setup/history, emits stream-style events, and persists sessions.
 - **Query/session loop:** `elixir/lib/claw_code/query_engine.ex` models the per-turn engine. It tracks a session id, mutable transcript, permission denials, token-budget accounting, max-turn stopping, structured output, and session persistence.
 - **Startup/bootstrap:** `elixir/lib/claw_code/setup.ex`, `elixir/lib/claw_code/prefetch.ex`, `elixir/lib/claw_code/deferred_init.ex`, `elixir/lib/claw_code/system_init.ex`, and `elixir/lib/claw_code/bootstrap_graph.ex` mirror the original startup story: prefetches first, then trust-gated deferred init, then command/tool loading, then the query loop.
 - **Mode branching:** `elixir/lib/claw_code/remote_runtime.ex` and `elixir/lib/claw_code/direct_modes.ex` provide Elixir placeholders for remote / SSH / teleport / direct-connect / deep-link branching.
-- **OTP control plane:** `elixir/lib/claw_code/control_plane.ex`, `session_server.ex`, and `workflow_server.ex` add supervised BEAM-native session/workflow primitives on top of the structural mirror.
+- **OTP control plane:** `elixir/lib/claw_code/control_plane.ex` adds supervised `GenServer` / `DynamicSupervisor` / `Registry` orchestration for resumable sessions plus persisted workflow/task tracking.
 
 ### 2. Command, tool, permissions, and control-flow porting
 
@@ -101,7 +101,7 @@ This repository currently mirrors **architecture, inventory, and control-flow sh
 
 ### 3. Tests and remaining gaps versus Claude Code
 
-- **The Elixir test suite is still a smoke/integration layer, not full parity validation.** `elixir/test/claw_code_port_test.exs` checks manifest generation, CLI commands, routing/bootstrap flows, permission filtering, session persistence, workflow/session control-plane behavior, exit-code behavior, and placeholder mode/report wiring. It does **not** prove that the Elixir tree can replace Claude Code end-to-end.
+- **The Elixir test suite is a smoke-test layer, not full parity validation.** `elixir/test/claw_code_port_test.exs` checks manifest generation, CLI commands, routing/bootstrap flows, permission filtering, session persistence, OTP control-plane session/workflow commands, exit-code behavior, and placeholder mode/report wiring. It does **not** prove that the Elixir tree can replace Claude Code end-to-end.
 - **Parity audit is inventory-oriented.** `elixir/lib/claw_code/parity_audit.ex` compares Elixir filenames and directory names against shared archive reference data. On a checkout without the local private archive, `mix claw parity-audit` correctly reports that direct comparison is unavailable.
 - **Rust still carries the deeper executable runtime direction.** The Elixir port now owns the primary control-plane/documentation surface, while `rust/` remains the stronger runtime for prompt building, permissions, MCP plumbing, OAuth, and low-level executable tools.
 
@@ -136,12 +136,13 @@ This repository now focuses on clean-room porting work instead, with the Elixir 
 └── README.md
 ```
 
-## Elixir Structural Mirror Quickstart
+## Elixir Primary Workspace Quickstart
 
-The Elixir port lives under `elixir/` and mirrors the Python workspace at the metadata/control-flow level while also shipping lightweight BEAM-native control-plane primitives. It currently includes:
+The Elixir port lives under `elixir/` and is the primary workspace for this repository. It currently includes:
 
-- a Mix CLI task (`mix claw ...`) for reporting, routing/bootstrap smoke checks, control-plane commands, and mode-placeholder commands
+- a Mix CLI task (`mix claw ...`) for summary, manifest, parity-audit, routing, bootstrap, turn-loop, session, workflow, and mode-placeholder commands
 - snapshot-backed command/tool inventories sourced from `src/reference_data/*.json`
+- OTP-native control-plane supervision for resumable sessions and persisted workflows/tasks
 - parity evidence against the archived root-file/directory surface plus the shared command/tool snapshots
 - supervised session/workflow primitives backed by OTP + persisted snapshot files
 - ExUnit coverage for manifest generation, CLI execution, routing/bootstrap/session/workflow behavior, permissions filtering, and mirrored registry execution
@@ -163,11 +164,12 @@ mix claw summary
 mix claw manifest
 mix claw setup-report
 mix claw bootstrap "review MCP tool"
-mix claw session-start demo-session
-mix claw session-submit demo-session "review MCP tool"
-mix claw workflow-start demo-flow
-mix claw workflow-add-step demo-flow "bootstrap session"
+mix claw control-plane-status
+mix claw start-session --id smoke-session "review MCP tool"
+mix claw submit-session smoke-session "review MCP tool"
 ```
+
+For a short architectural note on the new OTP supervision layer, see `docs/elixir-control-plane-overview.md`.
 
 Inspect mirrored command/tool inventories:
 
@@ -205,7 +207,7 @@ python3 -m unittest discover -s tests -v
 
 ## Current Parity Checkpoint
 
-The port now mirrors the archived root-entry file surface, top-level subsystem names, and command/tool inventories much more closely than before. However, neither port is yet a full runtime-equivalent replacement for the original TypeScript system: the Elixir tree now ships a real Mix CLI plus lightweight OTP control-plane primitives rather than just a metadata mirror, and the Python tree remains a smaller executable comparison layer.
+The port now mirrors the archived root-entry file surface, top-level subsystem names, command/tool inventories, and selected control-plane concepts much more closely than before. However, neither companion port is yet a full runtime-equivalent replacement for the original TypeScript system: the Elixir tree is the primary developer-facing workspace, but it still favors clean-room structural parity and OTP orchestration over full executable upstream parity.
 
 
 ## Built with `oh-my-codex`

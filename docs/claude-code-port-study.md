@@ -1,6 +1,6 @@
 # Claude Code → Python Port Study
 
-This note summarizes how this repository ports Claude Code concepts into a Python-first workspace, starting from the repository README and then tracing the implementation files.
+This note summarizes the Python companion workspace that remains in the repository for comparison/reference. The active workspace is now `elixir/`.
 
 ## 1. CLI and runtime architecture mapping
 

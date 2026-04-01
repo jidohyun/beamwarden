@@ -1,6 +1,6 @@
 # Claude Code → Python Port Analysis
 
-This note explains how this repository ports Claude Code concepts into Python, and where the executable surface has shifted into Rust.
+This note now documents the Python companion layer. The repository itself is Elixir-first, with `elixir/` as the primary workspace and `src/` retained as a historical/reference mirror.
 
 ## 1. CLI / runtime architecture mapping
 

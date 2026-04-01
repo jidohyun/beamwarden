@@ -27,7 +27,7 @@
 </p>
 
 > [!IMPORTANT]
-> **Elixir is now the primary workspace** for this repository. The active developer-facing surface lives under `elixir/` with Mix/OTP-native session and workflow orchestration, while `src/` and `rust/` remain companion/reference layers.
+> **Elixir is now the primary workspace** for this repository. The active developer-facing surface lives under `elixir/` with Mix/OTP-native session and workflow orchestration, while Python and Rust live under `reference/python/` and `reference/rust/` as companion/reference subtrees.
 
 > If you find this work useful, consider [sponsoring @instructkr on GitHub](https://github.com/sponsors/instructkr) to support continued open-source harness engineering research.
 
@@ -65,12 +65,11 @@ I've been deeply interested in **harness engineering** — studying how agent sy
 
 ## Porting Status
 
-The repository is now best understood as an **Elixir-first clean-room port repository** with Python and Rust companion workspaces.
+The repository is now best understood as an **Elixir-first clean-room port repository** with Python and Rust companion reference subtrees.
 
 - `elixir/` contains the active Mix/OTP workspace and the primary `mix claw` surface
-- `src/` contains the earlier Python structural mirror for reference/comparison
-- `tests/` verifies the Python companion workspace
-- `rust/` remains a companion runtime/reference effort
+- `reference/python/` contains the earlier Python structural mirror for reference/comparison
+- `reference/rust/` contains the Rust runtime/reference subtree
 - the exposed snapshot is no longer part of the tracked repository state
 
 The Elixir workspace is intentionally conservative but now materially richer than a pure metadata mirror: it preserves CLI shape, inventories, setup/bootstrap flows, routing, session persistence, parity evidence, and **OTP-native control-plane supervision for sessions and workflows**. It is still **not** runtime-equivalent to Claude Code.
@@ -92,8 +91,8 @@ This repository currently mirrors **architecture, inventory, and control-flow sh
 
 ### 2. Command, tool, permissions, and control-flow porting
 
-- **Command surface:** `elixir/lib/claw_code/commands.ex` loads `src/reference_data/commands_snapshot.json` and exposes lookup, filtering, and shim execution helpers. This is an inventory mirror of the archived command graph, not a full Elixir reimplementation of every command.
-- **Tool surface:** `elixir/lib/claw_code/tools.ex` does the same for `src/reference_data/tools_snapshot.json`, including simple-mode filtering, MCP exclusion switches, and permission-context filtering.
+- **Command surface:** `elixir/lib/claw_code/commands.ex` loads `reference/python/src/reference_data/commands_snapshot.json` and exposes lookup, filtering, and shim execution helpers. This is an inventory mirror of the archived command graph, not a full Elixir reimplementation of every command.
+- **Tool surface:** `elixir/lib/claw_code/tools.ex` does the same for `reference/python/src/reference_data/tools_snapshot.json`, including simple-mode filtering, MCP exclusion switches, and permission-context filtering.
 - **Execution registry:** `elixir/lib/claw_code/execution_registry.ex` wraps those mirrored command/tool entries so the runtime can “execute” them as descriptive shims during bootstrap and route simulations.
 - **Permissions model:** `elixir/lib/claw_code/permissions.ex` implements deny-name / deny-prefix filtering over mirrored tool metadata.
 - **Prompt handling:** `elixir/lib/claw_code/runtime.ex` tokenizes a prompt, scores it against mirrored command/tool metadata, then hands the selected entries to `elixir/lib/claw_code/query_engine.ex`, which records the turn and emits a Claude-Code-style result object.
@@ -103,7 +102,7 @@ This repository currently mirrors **architecture, inventory, and control-flow sh
 
 - **The Elixir test suite is a smoke-test layer, not full parity validation.** `elixir/test/claw_code_port_test.exs` checks manifest generation, CLI commands, routing/bootstrap flows, permission filtering, session persistence, OTP control-plane session/workflow commands, exit-code behavior, and placeholder mode/report wiring. It does **not** prove that the Elixir tree can replace Claude Code end-to-end.
 - **Parity audit is inventory-oriented.** `elixir/lib/claw_code/parity_audit.ex` compares Elixir filenames and directory names against shared archive reference data. On a checkout without the local private archive, `mix claw parity-audit` correctly reports that direct comparison is unavailable.
-- **Rust still carries the deeper executable runtime direction.** The Elixir port now owns the primary control-plane/documentation surface, while `rust/` remains the stronger runtime for prompt building, permissions, MCP plumbing, OAuth, and low-level executable tools.
+- **Rust still carries the deeper executable runtime direction.** The Elixir port now owns the primary control-plane/documentation surface, while `reference/rust/` remains the stronger runtime for prompt building, permissions, MCP plumbing, OAuth, and low-level executable tools.
 
 If you want the shortest honest summary: **the repository is now Elixir-first for docs, verification, structural mirror work, and lightweight OTP control-plane behavior — but not yet the full executable depth of Claude Code.**
 
@@ -120,17 +119,12 @@ This repository now focuses on clean-room porting work instead, with the Elixir 
 ├── elixir/                             # Elixir structural mirror (Mix project + ExUnit)
 │   ├── lib/claw_code
 │   └── test
-├── src/                                # Earlier Python structural mirror
-│   ├── __init__.py
-│   ├── commands.py
-│   ├── main.py
-│   ├── models.py
-│   ├── port_manifest.py
-│   ├── query_engine.py
-│   ├── task.py
-│   └── tools.py
-├── tests/                              # Python verification
-├── rust/                               # Deeper executable runtime effort
+├── reference/
+│   ├── python/                         # Historical Python mirror subtree
+│   │   ├── src
+│   │   ├── tests
+│   │   └── docs
+│   └── rust/                           # Rust runtime/reference subtree
 ├── assets/omx/                         # OmX workflow screenshots
 ├── 2026-03-09-is-legal-the-same-as-legitimate-ai-reimplementation-and-the-erosion-of-copyleft.md
 └── README.md
@@ -141,7 +135,7 @@ This repository now focuses on clean-room porting work instead, with the Elixir 
 The Elixir port lives under `elixir/` and is the primary workspace for this repository. It currently includes:
 
 - a Mix CLI task (`mix claw ...`) for summary, manifest, parity-audit, routing, bootstrap, turn-loop, session, workflow, and mode-placeholder commands
-- snapshot-backed command/tool inventories sourced from `src/reference_data/*.json`
+- snapshot-backed command/tool inventories sourced from `reference/python/src/reference_data/*.json`
 - OTP-native control-plane supervision for resumable sessions and persisted workflows/tasks
 - parity evidence against the archived root-file/directory surface plus the shared command/tool snapshots
 - supervised session/workflow primitives backed by OTP + persisted snapshot files
@@ -188,9 +182,9 @@ Read the current review/design notes:
 - docs/plans/2026-04-01-elixir-control-plane-design.md
 ```
 
-## Python Companion Workspace
+## Python Companion Reference Subtree
 
-The original clean-room Python mirror is still in the repository under `src/`. It remains useful as:
+The original clean-room Python mirror now lives under `reference/python/`. It remains useful as:
 
 - the first-pass port that established the mirror strategy
 - a reference implementation for manifest / parity / routing concepts
@@ -199,6 +193,7 @@ The original clean-room Python mirror is still in the repository under `src/`. I
 You can still inspect it with:
 
 ```bash
+cd reference/python
 python3 -m src.main summary
 python3 -m src.main manifest
 python3 -m src.main parity-audit

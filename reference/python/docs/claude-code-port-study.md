@@ -1,5 +1,7 @@
 # Claude Code → Python Port Study
 
+> Historical note: these paths were written when the Python companion lived at the repo root. The Python mirror now lives under `reference/python/`, and Rust companion paths are now under `reference/rust/`.
+
 This note summarizes the Python companion workspace that remains in the repository for comparison/reference. The active workspace is now `elixir/`.
 
 ## 1. CLI and runtime architecture mapping

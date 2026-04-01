@@ -1,5 +1,7 @@
 # Evidence for the Python Companion Port Analysis
 
+> Historical note: these paths were written when the Python companion lived at the repo root. The Python mirror now lives under `reference/python/`, and Rust companion paths are now under `reference/rust/`.
+
 This appendix captures the concrete command outputs used to support `docs/claude-code-port-analysis.md`.
 
 Observed in `worker-1` on `2026-04-01` from worktree `./.omx/team/study-this-repository-starting/worktrees/worker-1`.

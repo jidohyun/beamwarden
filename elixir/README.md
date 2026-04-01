@@ -39,9 +39,9 @@ mix claw start-workflow smoke-flow "Update README" "Update docs"
 
 This workspace follows the same conservative porting approach as the Python tree, while now taking ownership of the repository's primary orchestration surface:
 
-- it reuses `src/reference_data/*.json`
+- it reuses `reference/python/src/reference_data/*.json`
 - it mirrors structure and control flow
 - it adds Mix/OTP-native supervision for sessions and workflows
 - it does **not** claim full Claude Code runtime parity
 
-Python and Rust remain in the repository as companion/reference layers rather than the primary workspace.
+Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace.

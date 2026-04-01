@@ -157,6 +157,32 @@ defmodule ClawCode.QueryEngine do
     {updated_engine, events}
   end
 
+  def events_for_result(session_id, prompt, result) do
+    [
+      %{type: "message_start", session_id: session_id, prompt: prompt},
+      if(result.matched_commands != [],
+        do: %{type: "command_match", commands: result.matched_commands}
+      ),
+      if(result.matched_tools != [], do: %{type: "tool_match", tools: result.matched_tools}),
+      if(result.permission_denials != [],
+        do: %{
+          type: "permission_denial",
+          denials: Enum.map(result.permission_denials, & &1.tool_name)
+        }
+      ),
+      %{type: "message_delta", text: result.output},
+      %{
+        type: "message_stop",
+        usage: %{
+          input_tokens: result.usage.input_tokens,
+          output_tokens: result.usage.output_tokens
+        },
+        stop_reason: result.stop_reason
+      }
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
   def persist_session(%__MODULE__{} = engine) do
     store = TranscriptStore.flush(engine.transcript_store)
 

@@ -78,6 +78,15 @@ defmodule ClawCodePortTest do
     assert session.turn_result.usage.input_tokens >= 1
   end
 
+  test "bootstrap persistence matches turn result usage" do
+    session = ClawCode.Runtime.bootstrap_session("review MCP tool", limit: 5)
+    session_id = Path.basename(session.persisted_session_path, ".json")
+    stored = ClawCode.SessionStore.load_session(session_id)
+
+    assert stored.input_tokens == session.turn_result.usage.input_tokens
+    assert stored.output_tokens == session.turn_result.usage.output_tokens
+  end
+
   test "tool permission filtering cli runs" do
     output =
       capture_io(fn ->
@@ -85,6 +94,15 @@ defmodule ClawCodePortTest do
       end)
 
     assert output =~ "Tool entries:"
+    refute output =~ "MCPTool"
+  end
+
+  test "tool query path honors permission filtering" do
+    output =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["tools", "--query", "MCP", "--deny-prefix", "mcp"])
+      end)
+
     refute output =~ "MCPTool"
   end
 
@@ -144,5 +162,14 @@ defmodule ClawCodePortTest do
     tool_pool = capture_io(fn -> assert 0 == ClawCode.CLI.main(["tool-pool"]) end)
     assert command_graph =~ "Command Graph"
     assert tool_pool =~ "Tool Pool"
+  end
+
+  test "mix claw surfaces non-zero exit code for failures" do
+    {_output, status} =
+      System.cmd("mix", ["claw", "show-tool", "DefinitelyMissingTool"],
+        cd: Path.expand("..", __DIR__)
+      )
+
+    assert status == 1
   end
 end

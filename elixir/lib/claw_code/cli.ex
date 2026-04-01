@@ -52,7 +52,12 @@ defmodule ClawCode.CLI do
 
     output =
       if opts[:query] do
-        ClawCode.Commands.render_command_index(limit: opts[:limit] || 20, query: opts[:query])
+        ClawCode.Commands.render_command_index(
+          limit: opts[:limit] || 20,
+          query: opts[:query],
+          include_plugin_commands: !opts[:no_plugin_commands],
+          include_skill_commands: !opts[:no_skill_commands]
+        )
       else
         commands =
           ClawCode.Commands.get_commands(
@@ -85,7 +90,19 @@ defmodule ClawCode.CLI do
 
     output =
       if opts[:query] do
-        ClawCode.Tools.render_tool_index(limit: opts[:limit] || 20, query: opts[:query])
+        deny_names = Keyword.get_values(opts, :deny_tool)
+        deny_prefixes = Keyword.get_values(opts, :deny_prefix)
+
+        permission_context =
+          ClawCode.ToolPermissionContext.from_iterables(deny_names, deny_prefixes)
+
+        ClawCode.Tools.render_tool_index(
+          limit: opts[:limit] || 20,
+          query: opts[:query],
+          simple_mode: !!opts[:simple_mode],
+          include_mcp: !opts[:no_mcp],
+          permission_context: permission_context
+        )
       else
         deny_names = Keyword.get_values(opts, :deny_tool)
         deny_prefixes = Keyword.get_values(opts, :deny_prefix)

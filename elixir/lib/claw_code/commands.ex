@@ -81,7 +81,23 @@ defmodule ClawCode.Commands do
   def render_command_index(opts \\ []) do
     limit = Keyword.get(opts, :limit, 20)
     query = Keyword.get(opts, :query)
-    modules = if query, do: find_commands(query, limit), else: Enum.take(@ported_commands, limit)
+
+    modules =
+      opts
+      |> get_commands()
+      |> then(fn modules ->
+        if query do
+          needle = String.downcase(query)
+
+          Enum.filter(modules, fn module ->
+            String.contains?(String.downcase(module.name), needle) or
+              String.contains?(String.downcase(module.source_hint), needle)
+          end)
+        else
+          modules
+        end
+      end)
+      |> Enum.take(limit)
 
     [
       "Command entries: #{length(@ported_commands)}",

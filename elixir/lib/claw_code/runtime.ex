@@ -157,16 +157,7 @@ defmodule ClawCode.Runtime do
 
     denials = infer_permission_denials(matches)
 
-    {engine, stream_events} =
-      QueryEngine.stream_submit_message(
-        engine,
-        prompt,
-        Enum.map(Enum.filter(matches, &(&1.kind == "command")), & &1.name),
-        Enum.map(Enum.filter(matches, &(&1.kind == "tool")), & &1.name),
-        denials
-      )
-
-    {_engine_for_result, result} =
+    {engine, result} =
       QueryEngine.submit_message(
         engine,
         prompt,
@@ -175,6 +166,7 @@ defmodule ClawCode.Runtime do
         denials
       )
 
+    stream_events = QueryEngine.events_for_result(engine.session_id, prompt, result)
     {_persisted_engine, persisted_session_path} = QueryEngine.persist_session(engine)
 
     history =

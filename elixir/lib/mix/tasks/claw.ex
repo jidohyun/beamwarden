@@ -5,8 +5,13 @@ defmodule Mix.Tasks.Claw do
 
   @impl true
   def run(args) do
-    args
-    |> ClawCode.Main.run()
-    |> IO.puts()
+    case ClawCode.Main.run(args) do
+      {:ok, output} ->
+        IO.puts(output)
+
+      {:error, output} ->
+        IO.puts(output)
+        System.halt(1)
+    end
   end
 end

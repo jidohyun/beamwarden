@@ -31,7 +31,7 @@ defmodule ClawCode.Tools do
   def filter_tools_by_permission_context(tools, nil), do: tools
 
   def filter_tools_by_permission_context(tools, %ToolPermissionContext{} = context) do
-    Enum.reject(tools, &ToolPermissionContext.blocks?(context, &1.name))
+    Enum.reject(tools, &ToolPermissionContext.blocks_module?(context, &1))
   end
 
   def get_tools(opts \\ []) do
@@ -88,7 +88,23 @@ defmodule ClawCode.Tools do
   def render_tool_index(opts \\ []) do
     limit = Keyword.get(opts, :limit, 20)
     query = Keyword.get(opts, :query)
-    modules = if query, do: find_tools(query, limit), else: Enum.take(@ported_tools, limit)
+
+    modules =
+      opts
+      |> get_tools()
+      |> then(fn modules ->
+        if query do
+          needle = String.downcase(query)
+
+          Enum.filter(modules, fn module ->
+            String.contains?(String.downcase(module.name), needle) or
+              String.contains?(String.downcase(module.source_hint), needle)
+          end)
+        else
+          modules
+        end
+      end)
+      |> Enum.take(limit)
 
     [
       "Tool entries: #{length(@ported_tools)}",

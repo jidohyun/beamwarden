@@ -1,0 +1,182 @@
+defmodule BeamwardenDaemonModeTest do
+  use ExUnit.Case, async: false
+
+  setup do
+    ensure_distributed_node!()
+
+    daemon = start_peer!("claw_daemon_server")
+    client_a = start_peer!("claw_daemon_client")
+    client_b = start_peer!("claw_daemon_client")
+
+    daemon_label = Atom.to_string(daemon.node)
+    cookie = Atom.to_string(Node.get_cookie())
+
+    configure_daemon!(daemon.node, daemon_label, cookie)
+    configure_daemon!(client_a.node, daemon_label, cookie)
+    configure_daemon!(client_b.node, daemon_label, cookie)
+
+    assert {:ok, _status} = :rpc.call(daemon.node, Beamwarden.Daemon, :start_server, [[]])
+
+    on_exit(fn ->
+      stop_peer(client_b)
+      stop_peer(client_a)
+      stop_peer(daemon)
+    end)
+
+    {:ok, daemon: daemon, client_a: client_a, client_b: client_b}
+  end
+
+  test "configured clients proxy the session lifecycle through the daemon node", %{
+    daemon: daemon,
+    client_a: client_a,
+    client_b: client_b
+  } do
+    session_id = unique_id("daemon-proxy")
+    on_exit(fn -> cleanup_remote_session(daemon.node, session_id) end)
+
+    assert {:ok, daemon_status} =
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [["daemon-status"]])
+
+    assert daemon_status =~ "role=client"
+    assert daemon_status =~ "daemon_reachable=true"
+    assert daemon_status =~ "configured_daemon_node=#{Atom.to_string(daemon.node)}"
+
+    assert {:ok, server_status} =
+             :rpc.call(daemon.node, Beamwarden.CLI, :run, [["daemon-status"]])
+
+    assert server_status =~ "role=server"
+
+    assert {:ok, output} =
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [
+               ["start-session", "--id", session_id, "review MCP tool"]
+             ])
+
+    assert output =~ "session_id=#{session_id}"
+    assert output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+
+    assert :rpc.call(daemon.node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) !=
+             []
+
+    assert :rpc.call(client_a.node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) ==
+             []
+
+    assert {:ok, status_output} =
+             :rpc.call(client_b.node, Beamwarden.CLI, :run, [["session-status", session_id]])
+
+    assert status_output =~ "session_id=#{session_id}"
+    assert status_output =~ "turns=1"
+    assert status_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+  end
+
+  test "configured clients proxy workflow lifecycle updates through the daemon node", %{
+    daemon: daemon,
+    client_a: client_a,
+    client_b: client_b
+  } do
+    workflow_id = unique_id("daemon-workflow")
+    on_exit(fn -> cleanup_remote_workflow(daemon.node, workflow_id) end)
+
+    assert {:ok, output} =
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [
+               ["start-workflow", workflow_id, "bootstrap session"]
+             ])
+
+    assert output =~ "workflow_id=#{workflow_id}"
+    assert output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert output =~ "[pending] 1 — bootstrap session"
+
+    assert :rpc.call(daemon.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) !=
+             []
+
+    assert :rpc.call(client_a.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) ==
+             []
+
+    assert :rpc.call(client_b.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) ==
+             []
+
+    assert {:ok, advance_output} =
+             :rpc.call(client_b.node, Beamwarden.CLI, :run, [
+               ["advance-task", workflow_id, "1", "completed", "done"]
+             ])
+
+    assert advance_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert advance_output =~ "[completed] 1 — bootstrap session (done)"
+
+    assert {:ok, status_output} =
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [["workflow-status", workflow_id]])
+
+    assert status_output =~ "workflow_id=#{workflow_id}"
+    assert status_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert status_output =~ "[completed] 1 — bootstrap session (done)"
+  end
+
+  defp ensure_distributed_node! do
+    System.cmd("epmd", ["-daemon"])
+
+    if Node.alive?() do
+      :ok
+    else
+      name = :"claw-daemon-mode-#{System.unique_integer([:positive])}"
+      {:ok, _pid} = Node.start(name, :shortnames)
+      :ok
+    end
+  end
+
+  defp start_peer!(prefix) do
+    {:ok, peer, peer_node} =
+      :peer.start_link(%{
+        name: String.to_atom("#{prefix}_#{System.unique_integer([:positive])}"),
+        host: String.to_charlist(host_name()),
+        args: [~c"-setcookie", Atom.to_charlist(Node.get_cookie())]
+      })
+
+    assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
+    assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
+    assert :ok = :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, [])
+    %{peer: peer, node: peer_node}
+  end
+
+  defp configure_daemon!(target_node, daemon_label, cookie) do
+    assert :ok =
+             :rpc.call(target_node, Beamwarden.AppIdentity, :put_env, [:daemon_node, daemon_label])
+
+    assert :ok =
+             :rpc.call(target_node, Beamwarden.AppIdentity, :put_env, [:daemon_cookie, cookie])
+  end
+
+  defp cleanup_remote_session(target_node, session_id) do
+    case :rpc.call(target_node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) do
+      [{_pid, _value}] -> :rpc.call(target_node, Beamwarden.SessionServer, :stop, [session_id])
+      [] -> :ok
+      {:badrpc, _reason} -> :ok
+    end
+
+    File.rm(Beamwarden.session_path(session_id))
+  end
+
+  defp cleanup_remote_workflow(target_node, workflow_id) do
+    case :rpc.call(target_node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) do
+      [{_pid, _value}] -> :rpc.call(target_node, Beamwarden.WorkflowServer, :stop, [workflow_id])
+      [] -> :ok
+      {:badrpc, _reason} -> :ok
+    end
+
+    File.rm(Beamwarden.workflow_path(workflow_id))
+  end
+
+  defp stop_peer(%{peer: peer}) do
+    :peer.stop(peer)
+  catch
+    :exit, _reason -> :ok
+  end
+
+  defp unique_id(prefix) do
+    suffix = Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
+    "#{prefix}-#{suffix}"
+  end
+
+  defp host_name do
+    {:ok, hostname} = :inet.gethostname()
+    List.to_string(hostname)
+  end
+end

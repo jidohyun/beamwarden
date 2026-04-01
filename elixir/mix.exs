@@ -1,4 +1,4 @@
-defmodule ClawCode.MixProject do
+defmodule Beamwarden.MixProject do
   use Mix.Project
 
   def project do
@@ -14,7 +14,7 @@ defmodule ClawCode.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {ClawCode.Application, []}
+      mod: {Beamwarden.Application, []}
     ]
   end
 end

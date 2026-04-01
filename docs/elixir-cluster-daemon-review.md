@@ -8,9 +8,9 @@ The Elixir control plane is no longer only an ephemeral CLI wrapper around local
 
 It now ships:
 
-- a dedicated `ClawCode.DaemonSupervisor` root boundary
-- a supervised `ClawCode.ClusterDaemon` ownership ledger backed by DETS
-- `ClawCode.DaemonNodeMonitor` reconciliation on node membership changes
+- a dedicated `Beamwarden.DaemonSupervisor` root boundary
+- a supervised `Beamwarden.ClusterDaemon` ownership ledger backed by DETS
+- `Beamwarden.DaemonNodeMonitor` reconciliation on node membership changes
 - daemon-aware CLI proxying through `CLAW_DAEMON_NODE` / configured daemon mode
 - longname-aware daemon/client startup for cross-host operation when the daemon host uses an FQDN
 - daemon-first routing for new session/workflow work handled on the configured server node
@@ -32,7 +32,7 @@ It now ships:
 
 ### 3. Stronger long-running supervision tree
 
-- `ClawCode.Application` now boots a dedicated daemon/root supervisor.
+- `Beamwarden.Application` now boots a dedicated daemon/root supervisor.
 - Cluster services and control-plane services are supervised under explicit daemon-oriented boundaries instead of living as a flat one-off CLI tree.
 - Node monitoring and reconciliation are now first-class services.
 

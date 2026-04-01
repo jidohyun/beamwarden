@@ -6,13 +6,13 @@ The port still follows the project's clean-room structural-mirror philosophy, bu
 
 ## What was added
 
-- `ClawCode.SessionServer` — supervised, resumable session workers.
-- `ClawCode.WorkflowServer` — supervised workflow/task state with persisted transitions.
-- `ClawCode.ControlPlane` — the public API for session/workflow lifecycle calls.
-- `ClawCode.ClusterDaemon` — DETS-backed ownership ledger for multi-node routing/failover.
-- `ClawCode.DaemonSupervisor` — long-running root supervision boundary for cluster lifecycle services.
-- `ClawCode.DaemonNodeMonitor` — nodeup/nodedown monitoring plus reconciliation nudges.
-- `ClawCode.Daemon` — daemon-mode bootstrapping, status, stop, and CLI proxy support.
+- `Beamwarden.SessionServer` — supervised, resumable session workers.
+- `Beamwarden.WorkflowServer` — supervised workflow/task state with persisted transitions.
+- `Beamwarden.ControlPlane` — the public API for session/workflow lifecycle calls.
+- `Beamwarden.ClusterDaemon` — DETS-backed ownership ledger for multi-node routing/failover.
+- `Beamwarden.DaemonSupervisor` — long-running root supervision boundary for cluster lifecycle services.
+- `Beamwarden.DaemonNodeMonitor` — nodeup/nodedown monitoring plus reconciliation nudges.
+- `Beamwarden.Daemon` — daemon-mode bootstrapping, status, stop, and CLI proxy support.
 
 ## Current cluster/daemon posture
 

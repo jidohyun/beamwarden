@@ -200,11 +200,17 @@ defmodule ClawCode.QueryEngine do
   def render_summary(%__MODULE__{} = engine) do
     command_backlog = ClawCode.Commands.build_command_backlog()
     tool_backlog = ClawCode.Tools.build_tool_backlog()
+    onboarding = ClawCode.ProjectOnboardingState.current()
 
     [
       "# Elixir Porting Workspace Summary",
       "",
       ClawCode.PortManifest.to_markdown(engine.manifest),
+      "",
+      "Onboarding: #{ClawCode.ProjectOnboardingState.summary(onboarding)}",
+      "Dialogs: #{length(ClawCode.DialogLaunchers.default_dialogs())}",
+      "Default workflow tasks: #{length(ClawCode.Tasks.default_tasks())}",
+      "Control-plane tool definitions: #{length(ClawCode.ToolDefinition.default_tools())}",
       "",
       "Command surface: #{length(command_backlog.modules)} mirrored entries",
       Enum.take(PortingBacklog.summary_lines(command_backlog), 10),

@@ -10,6 +10,7 @@ defmodule ClawCode.PortManifest do
     "bootstrap_graph.ex" => "bootstrap/runtime graph stages",
     "command_graph.ex" => "command segmentation metadata",
     "commands.ex" => "command backlog metadata",
+    "control_plane.ex" => "OTP-native session/workflow orchestration",
     "context.ex" => "workspace context counting",
     "control_plane.ex" => "OTP control-plane facade",
     "cost_hook.ex" => "cost hook/report helpers",
@@ -42,6 +43,7 @@ defmodule ClawCode.PortManifest do
     "tasks.ex" => "workflow task helpers",
     "tool.ex" => "tool request/result helpers",
     "tool_pool.ex" => "assembled tool pool summary",
+    "tool_definition.ex" => "lightweight tool definition companions",
     "tools.ex" => "tool backlog metadata",
     "transcript.ex" => "transcript replay/flush state",
     "workflow_server.ex" => "supervised workflow runtime"

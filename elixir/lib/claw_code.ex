@@ -26,7 +26,7 @@ defmodule ClawCode do
   end
 
   def reference_data_root do
-    Path.join(repo_root(), "reference/python/src/reference_data")
+    Path.join(project_root(), "priv/reference_data")
   end
 
   def subsystem_snapshot_root do

@@ -4,7 +4,7 @@
 
 It is intentionally **not** a full runtime-equivalent reimplementation of Claude Code. Instead, it currently ships:
 
-- snapshot-backed command and tool inventories
+- Elixir-owned copied snapshot-backed command and tool inventories
 - manifest and parity-audit reporting
 - setup/bootstrap summaries
 - routing and synthetic turn-loop behavior
@@ -39,9 +39,9 @@ mix claw start-workflow smoke-flow "Update README" "Update docs"
 
 This workspace follows the same conservative porting approach as the Python tree, while now taking ownership of the repository's primary orchestration surface:
 
-- it reuses `reference/python/src/reference_data/*.json`
+- it keeps its own copied reference snapshots under `priv/reference_data/`
 - it mirrors structure and control flow
 - it adds Mix/OTP-native supervision for sessions and workflows
 - it does **not** claim full Claude Code runtime parity
 
-Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace.
+Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

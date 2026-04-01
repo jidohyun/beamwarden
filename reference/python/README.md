@@ -5,7 +5,7 @@
 It is no longer the primary workspace. Use it as:
 
 - a reference implementation for manifest/parity/routing concepts
-- the source of shared snapshot data used by the Elixir workspace
 - a historical comparison layer
+- a preserved snapshot/reference companion beside the Elixir-owned copies in `elixir/priv/reference_data/`
 
 Historical Python analysis notes now live under `reference/python/docs/`.

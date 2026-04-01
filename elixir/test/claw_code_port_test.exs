@@ -31,6 +31,16 @@ defmodule ClawCodePortTest do
     assert length(ClawCode.Tools.ported_tools()) >= 100
   end
 
+  test "elixir workspace owns copied reference snapshots" do
+    assert Path.expand(ClawCode.reference_data_root()) ==
+             Path.expand(Path.join(ClawCode.project_root(), "priv/reference_data"))
+
+    assert File.exists?(Path.join(ClawCode.reference_data_root(), "commands_snapshot.json"))
+    assert File.exists?(Path.join(ClawCode.reference_data_root(), "tools_snapshot.json"))
+    assert length(ClawCode.ReferenceData.subsystem_snapshots()) >= 10
+    refute String.contains?(ClawCode.reference_data_root(), "reference/python")
+  end
+
   test "commands and tools cli run" do
     commands_output =
       capture_io(fn ->

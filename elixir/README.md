@@ -56,10 +56,4 @@ mix claw workflow-status smoke-flow
 
 ## Honest limits
 
-Implementation references for these limits:
-
-- supervision tree: `lib/claw_code/application.ex`
-- routing/failover: `lib/claw_code/control_plane.ex`, `lib/claw_code/cluster.ex`
-- persisted ownership: `lib/claw_code/session_store.ex`, `lib/claw_code/workflow_store.ex`
-
 Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

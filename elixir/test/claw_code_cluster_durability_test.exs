@@ -87,9 +87,7 @@ defmodule ClawCodeClusterDurabilityTest do
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
-
-    restarted_pid = wait_for_restarted_pid(ClawCode.SessionRegistry, session_id, pid)
-    assert restarted_pid != pid
+    assert Registry.lookup(ClawCode.SessionRegistry, session_id) == []
 
     assert {:ok, second_snapshot} = ClawCode.ControlPlane.session_snapshot_local(session_id)
     assert second_snapshot.turns == 1

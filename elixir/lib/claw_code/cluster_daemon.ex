@@ -7,6 +7,7 @@ defmodule ClawCode.ClusterDaemon do
 
   @ets_table :claw_code_cluster_claims
   @dets_table :claw_code_cluster_ledger
+  @runtime_dets_table :claw_code_cluster_runtime
   @lease_ttl_ms 15_000
 
   def start_link(opts \\ []) do
@@ -45,11 +46,15 @@ defmodule ClawCode.ClusterDaemon do
   def resolve_owner(scope, identifier, persisted_owner \\ nil) do
     view = cluster_view(scope, identifier)
     freshest = freshest_record(view.records)
+    freshest_reachable = freshest_reachable_record(view.records)
     deterministic_owner = Cluster.owner_node(scope, identifier)
 
     cond do
       freshest && record_reachable?(freshest) ->
         owner_target(freshest.owner_node)
+
+      freshest_reachable ->
+        owner_target(freshest_reachable.owner_node)
 
       freshest && quorum_met?(view) ->
         deterministic_owner
@@ -70,6 +75,14 @@ defmodule ClawCode.ClusterDaemon do
     GenServer.call(__MODULE__, :reconcile_local_runtime)
   end
 
+  def persist_runtime_snapshot(scope, identifier, snapshot) when is_map(snapshot) do
+    GenServer.call(__MODULE__, {:persist_runtime_snapshot, scope, identifier, snapshot})
+  end
+
+  def runtime_snapshot(scope, identifier) do
+    GenServer.call(__MODULE__, {:runtime_snapshot, scope, identifier})
+  end
+
   def ledger_snapshot do
     GenServer.call(__MODULE__, :ledger_snapshot)
   end
@@ -88,10 +101,24 @@ defmodule ClawCode.ClusterDaemon do
         table -> table
       end
 
-    {:ok, dets} = :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
+    {:ok, dets} =
+      :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
+
+    {:ok, runtime_dets} =
+      :dets.open_file(@runtime_dets_table,
+        file: String.to_charlist(ClawCode.cluster_runtime_path())
+      )
+
     load_dets_into_ets(dets, table)
 
-    {:ok, %{table: table, dets: dets, ledger_path: ClawCode.cluster_ledger_path()}}
+    {:ok,
+     %{
+       table: table,
+       dets: dets,
+       runtime_dets: runtime_dets,
+       ledger_path: ClawCode.cluster_ledger_path(),
+       runtime_path: ClawCode.cluster_runtime_path()
+     }}
   end
 
   @impl true
@@ -137,11 +164,13 @@ defmodule ClawCode.ClusterDaemon do
           nil
 
         existing ->
+          updated_at = now_ms()
+
           existing
           |> Map.put(:running, false)
-          |> Map.put(:lease_expires_at, now_ms())
-          |> Map.put(:updated_at, now_ms())
-          |> maybe_store_record(state)
+          |> Map.put(:lease_expires_at, updated_at)
+          |> Map.put(:updated_at, updated_at)
+          |> then(&maybe_store_record(state, &1))
       end
 
     {:reply, updated, state}
@@ -197,6 +226,21 @@ defmodule ClawCode.ClusterDaemon do
   end
 
   @impl true
+  def handle_call({:persist_runtime_snapshot, scope, identifier, snapshot}, _from, state) do
+    normalized =
+      snapshot
+      |> normalize_runtime_snapshot(scope, identifier)
+      |> then(&maybe_store_runtime_snapshot(state, &1))
+
+    {:reply, normalized, state}
+  end
+
+  @impl true
+  def handle_call({:runtime_snapshot, scope, identifier}, _from, state) do
+    {:reply, lookup_runtime_snapshot(state.runtime_dets, scope, identifier), state}
+  end
+
+  @impl true
   def handle_call(:ledger_snapshot, _from, state) do
     snapshot =
       state.table
@@ -209,12 +253,19 @@ defmodule ClawCode.ClusterDaemon do
 
   @impl true
   def handle_call(:local_stats, _from, state) do
-    {:reply, %{ledger_path: state.ledger_path, records: :ets.info(state.table, :size)}, state}
+    {:reply,
+     %{
+       ledger_path: state.ledger_path,
+       runtime_path: state.runtime_path,
+       records: :ets.info(state.table, :size),
+       runtime_snapshots: :dets.info(state.runtime_dets, :size)
+     }, state}
   end
 
   @impl true
   def terminate(_reason, state) do
     :dets.close(state.dets)
+    :dets.close(state.runtime_dets)
     :ok
   end
 
@@ -372,12 +423,37 @@ defmodule ClawCode.ClusterDaemon do
     )
   end
 
+  defp maybe_store_runtime_snapshot(_state, nil), do: nil
+
+  defp maybe_store_runtime_snapshot(state, snapshot) do
+    key = runtime_snapshot_key(snapshot.scope, snapshot.identifier)
+    :ok = :dets.insert(state.runtime_dets, {key, snapshot})
+    :ok = :dets.sync(state.runtime_dets)
+    snapshot
+  end
+
+  defp lookup_runtime_snapshot(runtime_dets, scope, identifier) do
+    case :dets.lookup(runtime_dets, runtime_snapshot_key(scope, identifier)) do
+      [{_key, snapshot}] -> snapshot
+      [] -> nil
+    end
+  end
+
   defp freshest_record([]), do: nil
 
   defp freshest_record(records) do
     Enum.reduce(records, fn record, best ->
       if fresher?(record, best), do: record, else: best
     end)
+  end
+
+  defp freshest_reachable_record(records) do
+    records
+    |> Enum.filter(&record_reachable?/1)
+    |> case do
+      [] -> nil
+      reachable -> freshest_record(reachable)
+    end
   end
 
   defp fresher?(left, right) do
@@ -394,6 +470,7 @@ defmodule ClawCode.ClusterDaemon do
   defp next_epoch(%{epoch: epoch}, _owner_node), do: epoch + 1
 
   defp record_key(record), do: {record.scope, record.identifier}
+  defp runtime_snapshot_key(scope, identifier), do: {scope, identifier}
 
   defp touch_record(record) do
     now = now_ms()
@@ -415,6 +492,14 @@ defmodule ClawCode.ClusterDaemon do
       lease_expires_at: Map.get(record, :lease_expires_at, now_ms()),
       source: Map.get(record, :source, :claim)
     }
+  end
+
+  defp normalize_runtime_snapshot(snapshot, scope, identifier) do
+    snapshot
+    |> Map.new()
+    |> Map.put(:scope, scope)
+    |> Map.put(:identifier, identifier)
+    |> Map.put_new(:updated_at, now_ms())
   end
 
   defp owner_target("local"), do: node()

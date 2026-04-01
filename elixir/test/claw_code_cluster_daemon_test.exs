@@ -24,7 +24,9 @@ defmodule ClawCodeClusterDaemonTest do
     assert :ok = Supervisor.terminate_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
     assert_receive {:DOWN, ^ref, :process, ^daemon_pid, _reason}, 5_000
 
-    assert {:ok, _pid} = Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
+    assert {:ok, _pid} =
+             Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
+
     assert %{identifier: ^session_id, owner_node: ^owner_node} =
              ClawCode.ClusterDaemon.local_record(:session, session_id)
 
@@ -66,6 +68,46 @@ defmodule ClawCodeClusterDaemonTest do
 
     assert %{owner_node: owner_after, epoch: epoch_after} =
              ClawCode.ClusterDaemon.local_record(:session, session_id)
+
+    assert owner_after == Atom.to_string(node())
+    assert epoch_after > epoch_before
+  end
+
+  test "workflow failover reclaims ownership from an unreachable peer using the daemon ledger" do
+    peer = start_peer!()
+    peer_node = peer.node
+    workflow_id = routed_identifier(:workflow, peer_node)
+
+    on_exit(fn ->
+      cleanup_local_workflow(workflow_id)
+      stop_peer(peer)
+    end)
+
+    assert {:ok, first_snapshot} =
+             ClawCode.ControlPlane.add_workflow_step(
+               workflow_id,
+               "heal cluster",
+               "before failover"
+             )
+
+    assert first_snapshot.owner_node == Atom.to_string(peer_node)
+
+    assert %{owner_node: owner_before, epoch: epoch_before} =
+             ClawCode.ClusterDaemon.local_record(:workflow, workflow_id)
+
+    assert owner_before == Atom.to_string(peer_node)
+
+    stop_peer(peer)
+    wait_until(fn -> peer_node not in Node.list() end)
+
+    assert {:ok, second_snapshot} =
+             ClawCode.ControlPlane.complete_workflow_step(workflow_id, "1")
+
+    assert second_snapshot.owner_node == Atom.to_string(node())
+    assert [%{"status" => "completed", "title" => "heal cluster"}] = second_snapshot.steps
+
+    assert %{owner_node: owner_after, epoch: epoch_after} =
+             ClawCode.ClusterDaemon.local_record(:workflow, workflow_id)
 
     assert owner_after == Atom.to_string(node())
     assert epoch_after > epoch_before
@@ -120,12 +162,28 @@ defmodule ClawCodeClusterDaemonTest do
     File.rm(ClawCode.session_path(session_id))
   end
 
+  defp cleanup_local_workflow(workflow_id) do
+    if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
+      ClawCode.WorkflowServer.stop(workflow_id)
+    end
+
+    File.rm(ClawCode.workflow_path(workflow_id))
+  end
+
   defp wait_until(fun, attempts \\ 50)
-  defp wait_until(fun, _attempts) when fun.(), do: :ok
 
   defp wait_until(fun, attempts) do
-    Process.sleep(100)
-    wait_until(fun, attempts - 1)
+    cond do
+      fun.() ->
+        :ok
+
+      attempts <= 0 ->
+        flunk("condition did not become true before retries were exhausted")
+
+      true ->
+        Process.sleep(100)
+        wait_until(fun, attempts - 1)
+    end
   end
 
   defp unique_id(prefix) do

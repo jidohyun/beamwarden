@@ -43,16 +43,24 @@ defmodule ClawCode.QueryEngine do
 
   def from_saved_session(session_id) do
     stored = ClawCode.SessionStore.load_session(session_id)
+    from_runtime_snapshot(stored)
+  end
+
+  def from_runtime_snapshot(snapshot) when is_map(snapshot) do
+    session_id = fetch_snapshot_value(snapshot, :session_id)
+    messages = fetch_snapshot_value(snapshot, :messages) || []
+    input_tokens = fetch_snapshot_value(snapshot, :input_tokens) || 0
+    output_tokens = fetch_snapshot_value(snapshot, :output_tokens) || 0
 
     %__MODULE__{
       manifest: ClawCode.PortManifest.build(),
-      session_id: stored.session_id,
-      mutable_messages: stored.messages || [],
+      session_id: session_id,
+      mutable_messages: messages,
       total_usage: %UsageSummary{
-        input_tokens: stored.input_tokens,
-        output_tokens: stored.output_tokens
+        input_tokens: input_tokens,
+        output_tokens: output_tokens
       },
-      transcript_store: %TranscriptStore{entries: stored.messages || [], flushed: true}
+      transcript_store: %TranscriptStore{entries: messages, flushed: true}
     }
   end
 
@@ -245,5 +253,9 @@ defmodule ClawCode.QueryEngine do
 
   defp unique_id do
     Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
+  end
+
+  defp fetch_snapshot_value(snapshot, key) do
+    Map.get(snapshot, key) || Map.get(snapshot, Atom.to_string(key))
   end
 end

@@ -72,7 +72,7 @@ defmodule ClawCodeClusterDurabilityTest do
     assert_running_on_target!(expected_target, ClawCode.WorkflowRegistry, workflow_id, peer_node)
   end
 
-  test "local session state rehydrates after the session server crashes", %{
+  test "local session state rehydrates after the session server crashes without session json", %{
     peer: %{node: peer_node}
   } do
     session_id = unique_id("session-restart")
@@ -83,6 +83,7 @@ defmodule ClawCodeClusterDurabilityTest do
 
     assert first_snapshot.turns == 1
     assert pid = lookup_pid(ClawCode.SessionRegistry, session_id)
+    File.rm!(ClawCode.session_path(session_id))
 
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
@@ -100,9 +101,10 @@ defmodule ClawCodeClusterDurabilityTest do
     assert third_snapshot.turns == 2
   end
 
-  test "local workflow state rehydrates after the workflow server crashes", %{
-    peer: %{node: peer_node}
-  } do
+  test "local workflow state rehydrates after the workflow server crashes without workflow json",
+       %{
+         peer: %{node: peer_node}
+       } do
     workflow_id = unique_id("workflow-restart")
     on_exit(fn -> cleanup_workflow(workflow_id, peer_node) end)
 
@@ -111,6 +113,7 @@ defmodule ClawCodeClusterDurabilityTest do
 
     assert [%{"title" => "bootstrap session", "status" => "pending"}] = first_snapshot.steps
     assert pid = lookup_pid(ClawCode.WorkflowRegistry, workflow_id)
+    File.rm!(ClawCode.workflow_path(workflow_id))
 
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)

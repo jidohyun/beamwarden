@@ -65,6 +65,48 @@ defmodule ClawCodeDaemonModeTest do
     assert status_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
   end
 
+  test "configured clients proxy workflow lifecycle updates through the daemon node", %{
+    daemon: daemon,
+    client_a: client_a,
+    client_b: client_b
+  } do
+    workflow_id = unique_id("daemon-workflow")
+    on_exit(fn -> cleanup_remote_workflow(daemon.node, workflow_id) end)
+
+    assert {:ok, output} =
+             :rpc.call(client_a.node, ClawCode.CLI, :run, [
+               ["start-workflow", workflow_id, "bootstrap session"]
+             ])
+
+    assert output =~ "workflow_id=#{workflow_id}"
+    assert output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert output =~ "[pending] 1 — bootstrap session"
+
+    assert :rpc.call(daemon.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) !=
+             []
+
+    assert :rpc.call(client_a.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) ==
+             []
+
+    assert :rpc.call(client_b.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) ==
+             []
+
+    assert {:ok, advance_output} =
+             :rpc.call(client_b.node, ClawCode.CLI, :run, [
+               ["advance-task", workflow_id, "1", "completed", "done"]
+             ])
+
+    assert advance_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert advance_output =~ "[completed] 1 — bootstrap session (done)"
+
+    assert {:ok, status_output} =
+             :rpc.call(client_a.node, ClawCode.CLI, :run, [["workflow-status", workflow_id]])
+
+    assert status_output =~ "workflow_id=#{workflow_id}"
+    assert status_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
+    assert status_output =~ "[completed] 1 — bootstrap session (done)"
+  end
+
   defp ensure_distributed_node! do
     System.cmd("epmd", ["-daemon"])
 
@@ -110,6 +152,16 @@ defmodule ClawCodeDaemonModeTest do
     end
 
     File.rm(ClawCode.session_path(session_id))
+  end
+
+  defp cleanup_remote_workflow(target_node, workflow_id) do
+    case :rpc.call(target_node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) do
+      [{_pid, _value}] -> :rpc.call(target_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+      [] -> :ok
+      {:badrpc, _reason} -> :ok
+    end
+
+    File.rm(ClawCode.workflow_path(workflow_id))
   end
 
   defp stop_peer(%{peer: peer}) do

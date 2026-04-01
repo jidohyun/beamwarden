@@ -39,18 +39,7 @@ defmodule ClawCode.WorkflowServer do
 
   @impl true
   def init(workflow_id) do
-    state =
-      case ClawCode.WorkflowStore.load(workflow_id) do
-        {:ok, snapshot} ->
-          %__MODULE__{
-            workflow_id: workflow_id,
-            steps: snapshot["steps"] || [],
-            persisted_workflow_path: ClawCode.workflow_path(workflow_id)
-          }
-
-        :error ->
-          %__MODULE__{workflow_id: workflow_id}
-      end
+    state = restore_state(workflow_id)
 
     state =
       if state.persisted_workflow_path do
@@ -64,6 +53,8 @@ defmodule ClawCode.WorkflowServer do
       workflow_id,
       persisted_path: state.persisted_workflow_path
     )
+
+    persist_runtime_snapshot(state)
 
     {:ok, state}
   end
@@ -115,15 +106,23 @@ defmodule ClawCode.WorkflowServer do
   end
 
   @impl true
-  def terminate(_reason, %__MODULE__{workflow_id: workflow_id}) do
+  def terminate(_reason, %__MODULE__{} = state) do
+    safe_cluster_update(fn -> persist_runtime_snapshot(state) end)
+    workflow_id = state.workflow_id
     safe_cluster_update(fn -> ClawCode.ClusterDaemon.mark_stopped(:workflow, workflow_id) end)
     :ok
   end
 
   defp persist(%__MODULE__{} = state) do
     path = ClawCode.WorkflowStore.save(snapshot_map(state))
-    safe_cluster_update(fn -> ClawCode.ClusterDaemon.note_persisted(:workflow, state.workflow_id, path) end)
-    %{state | persisted_workflow_path: path}
+
+    safe_cluster_update(fn ->
+      ClawCode.ClusterDaemon.note_persisted(:workflow, state.workflow_id, path)
+    end)
+
+    next_state = %{state | persisted_workflow_path: path}
+    persist_runtime_snapshot(next_state)
+    next_state
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
@@ -139,6 +138,60 @@ defmodule ClawCode.WorkflowServer do
   defp maybe_put_description(step, detail), do: Map.put(step, "description", detail)
 
   defp via(workflow_id), do: {:via, Registry, {ClawCode.WorkflowRegistry, workflow_id}}
+
+  defp restore_state(workflow_id) do
+    case ClawCode.ClusterDaemon.runtime_snapshot(:workflow, workflow_id) do
+      snapshot when is_map(snapshot) ->
+        %__MODULE__{
+          workflow_id: workflow_id,
+          steps: runtime_value(snapshot, :steps) || [],
+          persisted_workflow_path:
+            runtime_value(snapshot, :persisted_workflow_path) ||
+              existing_persisted_path(workflow_id)
+        }
+
+      _ ->
+        case ClawCode.WorkflowStore.load(workflow_id) do
+          {:ok, snapshot} ->
+            %__MODULE__{
+              workflow_id: workflow_id,
+              steps: snapshot["steps"] || [],
+              persisted_workflow_path: ClawCode.workflow_path(workflow_id)
+            }
+
+          :error ->
+            %__MODULE__{workflow_id: workflow_id}
+        end
+    end
+  end
+
+  defp persist_runtime_snapshot(%__MODULE__{} = state) do
+    ClawCode.ClusterDaemon.persist_runtime_snapshot(
+      :workflow,
+      state.workflow_id,
+      runtime_snapshot(state)
+    )
+
+    :ok
+  end
+
+  defp runtime_snapshot(%__MODULE__{} = state) do
+    %{
+      workflow_id: state.workflow_id,
+      steps: state.steps,
+      persisted_workflow_path: state.persisted_workflow_path
+    }
+  end
+
+  defp runtime_value(snapshot, key) do
+    Map.get(snapshot, key) || Map.get(snapshot, Atom.to_string(key))
+  end
+
+  defp existing_persisted_path(workflow_id) do
+    if File.exists?(ClawCode.workflow_path(workflow_id)),
+      do: ClawCode.workflow_path(workflow_id),
+      else: nil
+  end
 
   defp safe_cluster_update(fun) do
     fun.()

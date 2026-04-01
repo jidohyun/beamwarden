@@ -23,7 +23,7 @@ defmodule ClawCode.Cluster do
 
   def with_claim_lock(scope, identifier, fun) when is_function(fun, 0) do
     if Node.alive?() do
-      :global.trans({__MODULE__, scope, identifier}, fun, member_nodes())
+      :global.trans({{__MODULE__, scope, identifier}, self()}, fun, member_nodes())
     else
       fun.()
     end
@@ -123,8 +123,11 @@ defmodule ClawCode.Cluster do
       daemon_role: daemon_role,
       configured_daemon_node: configured_daemon_node,
       daemon_ledger_path: daemon.ledger_path,
+      daemon_runtime_path: daemon.runtime_path,
       daemon_records: daemon.records,
-      routing_strategy: "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
+      daemon_runtime_snapshots: daemon.runtime_snapshots,
+      routing_strategy:
+        "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
     }
   end
 
@@ -145,6 +148,8 @@ defmodule ClawCode.Cluster do
       "configured_daemon_node=#{status.configured_daemon_node}",
       "daemon_records=#{status.daemon_records}",
       "daemon_ledger_path=#{status.daemon_ledger_path}",
+      "daemon_runtime_snapshots=#{status.daemon_runtime_snapshots}",
+      "daemon_runtime_path=#{status.daemon_runtime_path}",
       "routing_strategy=#{status.routing_strategy}",
       if(
         status.distributed?,

@@ -57,6 +57,10 @@ defmodule ClawCode do
     Path.join(cluster_node_root(), "ledger.dets")
   end
 
+  def cluster_runtime_path do
+    Path.join(cluster_node_root(), "runtime.dets")
+  end
+
   def cluster_storage_label do
     key = {__MODULE__, :cluster_storage_label}
 

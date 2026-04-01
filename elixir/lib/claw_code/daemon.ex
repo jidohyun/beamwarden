@@ -5,6 +5,7 @@ defmodule ClawCode.Daemon do
 
   @client_prefix "claw_code_cli"
   @default_server_name "claw_code_daemon"
+  @default_name_mode :shortnames
 
   def preflight(args) do
     cond do
@@ -116,6 +117,7 @@ defmodule ClawCode.Daemon do
     %{
       configured?: not is_nil(daemon),
       daemon_node: daemon && Atom.to_string(daemon),
+      name_mode: configured_name_mode(),
       current_node: if(Node.alive?(), do: Atom.to_string(node()), else: "local"),
       role: role_label(daemon, reachable),
       distributed?: Node.alive?(),
@@ -134,6 +136,7 @@ defmodule ClawCode.Daemon do
       "distributed=#{status.distributed?}",
       "current_node=#{status.current_node}",
       "configured_daemon_node=#{status.daemon_node || "none"}",
+      "name_mode=#{status.name_mode}",
       "daemon_reachable=#{status.daemon_reachable?}",
       remote_line("remote_cluster_size", status.remote_cluster, :cluster_size),
       remote_line("remote_members", status.remote_cluster, :members, fn members ->
@@ -168,6 +171,10 @@ defmodule ClawCode.Daemon do
     Application.get_env(:claw_code, :daemon_cookie) || System.get_env("CLAW_DAEMON_COOKIE")
   end
 
+  def configured_name_mode do
+    daemon_name_mode()
+  end
+
   def proxyable_args?(args) do
     case args do
       [command | _rest] ->
@@ -197,7 +204,9 @@ defmodule ClawCode.Daemon do
   def daemon_run_command?(args), do: match?(["daemon-run" | _], args)
 
   defp daemon_run_options(args) do
-    {opts, _, _} = OptionParser.parse(args, strict: [name: :string, cookie: :string])
+    {opts, _, _} =
+      OptionParser.parse(args, strict: [name: :string, cookie: :string, longname: :boolean])
+
     opts
   end
 
@@ -209,8 +218,9 @@ defmodule ClawCode.Daemon do
       :ok
     else
       name = server_node_name(opts[:name])
+      name_mode = daemon_name_mode(opts)
 
-      case Node.start(name, :shortnames) do
+      case Node.start(name, name_mode) do
         {:ok, _pid} ->
           maybe_put_cookie(opts[:cookie])
           :ok
@@ -232,8 +242,9 @@ defmodule ClawCode.Daemon do
       :ok
     else
       name = String.to_atom("#{@client_prefix}_#{System.unique_integer([:positive])}")
+      name_mode = daemon_name_mode()
 
-      case Node.start(name, :shortnames) do
+      case Node.start(name, name_mode) do
         {:ok, _pid} ->
           maybe_put_cookie(daemon_cookie())
           :ok
@@ -308,6 +319,39 @@ defmodule ClawCode.Daemon do
   defp maybe_put_cookie(cookie) do
     Node.set_cookie(String.to_atom(cookie))
     :ok
+  end
+
+  defp daemon_name_mode(opts \\ []) do
+    cond do
+      Keyword.get(opts, :longname, false) ->
+        :longnames
+
+      longname_env?() ->
+        :longnames
+
+      longname_label?(configured_node_label()) ->
+        :longnames
+
+      true ->
+        @default_name_mode
+    end
+  end
+
+  defp longname_env? do
+    case System.get_env("CLAW_DAEMON_NAME_MODE") do
+      value when value in ["long", "longname", "longnames"] -> true
+      _ -> false
+    end
+  end
+
+  defp longname_label?(nil), do: false
+  defp longname_label?(""), do: false
+
+  defp longname_label?(label) do
+    case String.split(label, "@", parts: 2) do
+      [_node, host] -> String.contains?(host, ".")
+      _ -> false
+    end
   end
 
   defp server_node_name(nil), do: String.to_atom(@default_server_name)

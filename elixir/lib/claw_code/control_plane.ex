@@ -277,10 +277,10 @@ defmodule ClawCode.ControlPlane do
   def workflow_route_node(workflow_id), do: resolve_workflow_node(workflow_id)
 
   def session_running?(session_id),
-    do: Registry.lookup(ClawCode.SessionRegistry, session_id) != []
+    do: registry_running?(ClawCode.SessionRegistry, session_id)
 
   def workflow_running?(workflow_id),
-    do: Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != []
+    do: registry_running?(ClawCode.WorkflowRegistry, workflow_id)
 
   defp workflow_status(steps) do
     cond do
@@ -344,6 +344,14 @@ defmodule ClawCode.ControlPlane do
             _ -> false
           end
         end)
+    end
+  end
+
+  defp registry_running?(registry, identifier) do
+    if Process.whereis(registry) do
+      Registry.lookup(registry, identifier) != []
+    else
+      false
     end
   end
 

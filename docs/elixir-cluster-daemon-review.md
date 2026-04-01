@@ -12,6 +12,7 @@ It now ships:
 - a supervised `ClawCode.ClusterDaemon` ownership ledger backed by DETS
 - `ClawCode.DaemonNodeMonitor` reconciliation on node membership changes
 - daemon-aware CLI proxying through `CLAW_DAEMON_NODE` / configured daemon mode
+- longname-aware daemon/client startup for cross-host operation when the daemon host uses an FQDN
 - daemon-first routing for new session/workflow work handled on the configured server node
 - distributed ExUnit coverage proving that one client can create session state through the daemon and another client can inspect the same state without depending on the first client process surviving
 
@@ -42,6 +43,7 @@ The implementation is materially stronger, but it is still intentionally conserv
 - quorum/failover is still **best-effort across connected BEAM nodes**; there is no external consensus system
 - session/workflow payload durability still relies on JSON snapshots
 - cluster discovery is still limited to BEAM nodes that can already connect to each other
+- operators must still coordinate cookies and choose matching shortname/longname mode explicitly across hosts
 - `cluster-connect` / `cluster-disconnect` still require a distributed VM
 
 ## Verification contract

@@ -166,6 +166,18 @@ mix claw start-session --id smoke-session "review MCP tool"
 mix claw submit-session smoke-session "review MCP tool"
 ```
 
+Cross-host daemon note:
+
+```bash
+# daemon host
+cd elixir
+CLAW_DAEMON_COOKIE=clawsecret mix claw daemon-run --name claw_code_daemon --longname
+
+# remote client / second shell
+cd elixir
+CLAW_DAEMON_NODE=claw_code_daemon@daemon.example.internal CLAW_DAEMON_COOKIE=clawsecret CLAW_DAEMON_NAME_MODE=longnames mix claw daemon-status
+```
+
 For a short architectural note on the daemon-first OTP supervision layer, see `docs/elixir-control-plane-overview.md`.
 
 Inspect mirrored command/tool inventories:

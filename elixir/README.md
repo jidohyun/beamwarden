@@ -31,6 +31,7 @@ Run a long-lived daemon node:
 ```bash
 cd elixir
 mix claw daemon-run --name claw_code_daemon
+# add --longname for cross-host / FQDN operation
 ```
 
 Talk to it from another shell:
@@ -41,6 +42,21 @@ CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw daemon-status
 CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw start-session --id smoke-session "review MCP tool"
 CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix claw session-status smoke-session
 ```
+
+If the daemon node uses a fully-qualified host (for example `claw_code_daemon@daemon.example.internal`), run both the daemon and clients in longname mode:
+
+```bash
+# daemon host
+CLAW_DAEMON_COOKIE=clawsecret mix claw daemon-run --name claw_code_daemon --longname
+
+# remote client
+CLAW_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+CLAW_DAEMON_COOKIE=clawsecret \
+CLAW_DAEMON_NAME_MODE=longnames \
+mix claw daemon-status
+```
+
+Use the same cookie on every participating node. Shortname mode remains the default for local/same-host workflows.
 
 Representative local commands:
 

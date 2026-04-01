@@ -194,6 +194,8 @@ The original clean-room Python mirror now lives under `reference/python/`. It re
 
 Elixir now owns its checked-in snapshot fixtures under `elixir/priv/reference_data/`, so the Python subtree is a comparison/reference workspace rather than an input required for `mix compile` or `mix test`.
 
+Elixir now owns its checked-in snapshot fixtures under `elixir/priv/reference_data/`, so the Python subtree is a comparison/reference workspace rather than an input required for `mix compile` or `mix test`.
+
 You can still inspect it with:
 
 ```bash

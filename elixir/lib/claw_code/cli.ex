@@ -2,6 +2,7 @@ defmodule ClawCode.CLI do
   @moduledoc false
 
   def main(args) do
+    Application.ensure_all_started(:claw_code)
     {status, output} = run(args)
     IO.puts(output)
 
@@ -37,6 +38,64 @@ defmodule ClawCode.CLI do
 
   def run(["tool-pool"]) do
     {:ok, ClawCode.ToolPool.as_markdown()}
+  end
+
+  def run(["session-start", session_id]) do
+    with {:ok, _pid} <- ClawCode.ControlPlane.ensure_session(session_id),
+         {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
+      {:ok, render_snapshot("Session", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to start session: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["session-submit", session_id, prompt]) do
+    with {:ok, snapshot} <- ClawCode.ControlPlane.submit_prompt(session_id, prompt) do
+      {:ok, render_snapshot("Session", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to submit prompt: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["session-status", session_id]) do
+    with {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
+      {:ok, render_snapshot("Session", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to load session status: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-start", workflow_id]) do
+    with {:ok, _pid} <- ClawCode.ControlPlane.ensure_workflow(workflow_id),
+         {:ok, snapshot} <- ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
+      {:ok, render_snapshot("Workflow", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-add-step", workflow_id, title]) do
+    with {:ok, snapshot} <- ClawCode.ControlPlane.add_workflow_step(workflow_id, title) do
+      {:ok, render_snapshot("Workflow", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to add workflow step: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-complete-step", workflow_id, step_id]) do
+    with {:ok, snapshot} <- ClawCode.ControlPlane.complete_workflow_step(workflow_id, step_id) do
+      {:ok, render_snapshot("Workflow", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to complete workflow step: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-status", workflow_id]) do
+    with {:ok, snapshot} <- ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
+      {:ok, render_snapshot("Workflow", snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to load workflow status: #{inspect(reason)}"}
+    end
   end
 
   def run(["commands" | rest]) do
@@ -245,5 +304,14 @@ defmodule ClawCode.CLI do
 
   def run(_args) do
     {:error, "Unknown command"}
+  end
+
+  defp render_snapshot(title, snapshot) do
+    [
+      "#{title} Snapshot",
+      "",
+      JSON.encode!(snapshot)
+    ]
+    |> Enum.join("\n")
   end
 end

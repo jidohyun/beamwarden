@@ -36,4 +36,16 @@ defmodule ClawCode do
   def session_root do
     Path.join(project_root(), ".port_sessions")
   end
+
+  def workflow_root do
+    Path.join(session_root(), "workflows")
+  end
+
+  def session_path(session_id) do
+    Path.join(session_root(), "#{session_id}.json")
+  end
+
+  def workflow_path(workflow_id) do
+    Path.join(workflow_root(), "#{workflow_id}.json")
+  end
 end

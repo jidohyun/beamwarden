@@ -157,6 +157,64 @@ defmodule ClawCodePortTest do
     assert loaded =~ "messages"
   end
 
+  test "session control plane persists and reports state" do
+    session_id = "demo-session-#{System.unique_integer([:positive])}"
+
+    start_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-start", session_id]) end)
+
+    submit_output =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["session-submit", session_id, "review MCP tool"])
+      end)
+
+    status_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-status", session_id]) end)
+
+    assert start_output =~ "Session Snapshot"
+    assert submit_output =~ "\"turns\":1"
+    assert status_output =~ "\"session_id\":\"#{session_id}\""
+    assert File.exists?(Path.join(ClawCode.session_root(), "#{session_id}.json"))
+  end
+
+  test "workflow control plane tracks steps" do
+    workflow_id = "demo-flow-#{System.unique_integer([:positive])}"
+
+    start_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-start", workflow_id]) end)
+
+    add_output =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["workflow-add-step", workflow_id, "bootstrap session"])
+      end)
+
+    complete_output =
+      capture_io(fn ->
+        assert 0 == ClawCode.CLI.main(["workflow-complete-step", workflow_id, "1"])
+      end)
+
+    status_output =
+      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
+
+    assert start_output =~ "Workflow Snapshot"
+    assert add_output =~ "\"title\":\"bootstrap session\""
+    assert complete_output =~ "\"status\":\"completed\""
+    assert status_output =~ "\"workflow_id\":\"#{workflow_id}\""
+  end
+
+  test "missing python mirror concepts are represented in elixir files" do
+    expected =
+      ~w(cost_hook cost_tracker dialog_launchers ink interactive_helpers project_onboarding_state query repl_launcher task tasks tool)
+
+    present =
+      ClawCode.source_root()
+      |> Path.join("*.ex")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".ex"))
+
+    Enum.each(expected, fn name -> assert name in present end)
+  end
+
   test "command graph and tool pool cli run" do
     command_graph = capture_io(fn -> assert 0 == ClawCode.CLI.main(["command-graph"]) end)
     tool_pool = capture_io(fn -> assert 0 == ClawCode.CLI.main(["tool-pool"]) end)

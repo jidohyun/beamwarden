@@ -2,6 +2,7 @@ defmodule Mix.Tasks.Claw do
   use Mix.Task
 
   @shortdoc "Run the Elixir structural mirror CLI"
+  @requirements ["app.start"]
 
   @impl true
   def run(args) do

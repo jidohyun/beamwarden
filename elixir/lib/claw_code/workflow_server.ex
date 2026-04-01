@@ -1,0 +1,93 @@
+defmodule ClawCode.WorkflowServer do
+  @moduledoc false
+
+  use GenServer
+
+  defstruct [:workflow_id, steps: [], persisted_workflow_path: nil]
+
+  def child_spec(workflow_id) do
+    %{
+      id: {__MODULE__, workflow_id},
+      start: {__MODULE__, :start_link, [workflow_id]},
+      restart: :transient
+    }
+  end
+
+  def start_link(workflow_id) do
+    GenServer.start_link(__MODULE__, workflow_id, name: via(workflow_id))
+  end
+
+  def add_step(workflow_id, title, description \\ nil) do
+    GenServer.call(via(workflow_id), {:add_step, title, description})
+  end
+
+  def complete_step(workflow_id, step_id) do
+    GenServer.call(via(workflow_id), {:complete_step, step_id})
+  end
+
+  def snapshot(workflow_id) do
+    GenServer.call(via(workflow_id), :snapshot)
+  end
+
+  @impl true
+  def init(workflow_id) do
+    state =
+      case ClawCode.WorkflowStore.load(workflow_id) do
+        {:ok, snapshot} ->
+          %__MODULE__{
+            workflow_id: workflow_id,
+            steps: snapshot["steps"] || [],
+            persisted_workflow_path: ClawCode.workflow_path(workflow_id)
+          }
+
+        :error ->
+          %__MODULE__{workflow_id: workflow_id}
+      end
+
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call({:add_step, title, description}, _from, %__MODULE__{} = state) do
+    step = %{
+      "id" => "#{length(state.steps) + 1}",
+      "title" => title,
+      "description" => description,
+      "status" => "pending"
+    }
+
+    next_state = persist(%{state | steps: state.steps ++ [step]})
+    {:reply, snapshot_map(next_state), next_state}
+  end
+
+  @impl true
+  def handle_call({:complete_step, step_id}, _from, %__MODULE__{} = state) do
+    steps =
+      Enum.map(state.steps, fn step ->
+        if step["id"] == step_id, do: Map.put(step, "status", "completed"), else: step
+      end)
+
+    next_state = persist(%{state | steps: steps})
+    {:reply, snapshot_map(next_state), next_state}
+  end
+
+  @impl true
+  def handle_call(:snapshot, _from, %__MODULE__{} = state) do
+    {:reply, snapshot_map(state), state}
+  end
+
+  defp persist(%__MODULE__{} = state) do
+    path = ClawCode.WorkflowStore.save(snapshot_map(state))
+    %{state | persisted_workflow_path: path}
+  end
+
+  defp snapshot_map(%__MODULE__{} = state) do
+    %{
+      workflow_id: state.workflow_id,
+      steps: state.steps,
+      persisted_workflow_path: state.persisted_workflow_path
+    }
+  end
+
+  defp via(workflow_id), do: {:via, Registry, {ClawCode.WorkflowRegistry, workflow_id}}
+end

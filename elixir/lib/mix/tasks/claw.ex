@@ -6,13 +6,7 @@ defmodule Mix.Tasks.Claw do
 
   @impl true
   def run(args) do
-    case ClawCode.Main.run(args) do
-      {:ok, output} ->
-        IO.puts(output)
-
-      {:error, output} ->
-        IO.puts(output)
-        System.halt(1)
-    end
+    status = ClawCode.CLI.main(args)
+    if status != 0, do: System.halt(status)
   end
 end

@@ -58,43 +58,73 @@ defmodule ClawCode.CLI do
   end
 
   def run(["session-status", session_id]) do
-    with {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
-      {:ok, render_snapshot("Session", snapshot)}
-    else
-      {:error, reason} -> {:error, "Failed to load session status: #{inspect(reason)}"}
+    case ClawCode.ControlPlane.session_snapshot(session_id) do
+      {:error, :not_found} ->
+        {:error, "Session not found: #{session_id}"}
+
+      session ->
+        {:ok, ClawCode.ControlPlane.render_session(session)}
     end
   end
 
-  def run(["workflow-start", workflow_id]) do
-    with {:ok, _pid} <- ClawCode.ControlPlane.ensure_workflow(workflow_id),
-         {:ok, snapshot} <- ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
-      {:ok, render_snapshot("Workflow", snapshot)}
-    else
+  def run(["submit-session", session_id, prompt | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
+
+    case ClawCode.ControlPlane.submit_session(session_id, prompt, limit: opts[:limit] || 5) do
+      {:error, :not_found} ->
+        {:error, "Session not found: #{session_id}"}
+
+      response ->
+        {:ok,
+         Enum.join(
+           [
+             response.text,
+             "",
+             "session_id=#{response.session_id}",
+             "stop_reason=#{response.stop_reason}",
+             "matched_commands=#{Enum.join(response.matched_commands, ", ")}",
+             "matched_tools=#{Enum.join(response.matched_tools, ", ")}"
+           ],
+           "\n"
+         )}
+    end
+  end
+
+  def run(["start-workflow", name | tasks]) do
+    workflow_tasks =
+      if tasks == [],
+        do: ClawCode.Tasks.default_tasks(),
+        else: ClawCode.Tasks.from_descriptions(tasks)
+
+    case ClawCode.ControlPlane.start_workflow(name, workflow_tasks) do
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
       {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
     end
   end
 
-  def run(["workflow-add-step", workflow_id, title]) do
-    with {:ok, snapshot} <- ClawCode.ControlPlane.add_workflow_step(workflow_id, title) do
-      {:ok, render_snapshot("Workflow", snapshot)}
-    else
-      {:error, reason} -> {:error, "Failed to add workflow step: #{inspect(reason)}"}
-    end
-  end
-
-  def run(["workflow-complete-step", workflow_id, step_id]) do
-    with {:ok, snapshot} <- ClawCode.ControlPlane.complete_workflow_step(workflow_id, step_id) do
-      {:ok, render_snapshot("Workflow", snapshot)}
-    else
-      {:error, reason} -> {:error, "Failed to complete workflow step: #{inspect(reason)}"}
-    end
-  end
-
   def run(["workflow-status", workflow_id]) do
-    with {:ok, snapshot} <- ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
-      {:ok, render_snapshot("Workflow", snapshot)}
-    else
-      {:error, reason} -> {:error, "Failed to load workflow status: #{inspect(reason)}"}
+    case ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
+      {:error, :not_found} ->
+        {:error, "Workflow not found: #{workflow_id}"}
+
+      workflow ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+    end
+  end
+
+  def run(["advance-task", workflow_id, task_id, status | detail_parts]) do
+    detail =
+      case Enum.join(detail_parts, " ") do
+        "" -> nil
+        text -> text
+      end
+
+    case ClawCode.ControlPlane.advance_task(workflow_id, task_id, status, detail) do
+      {:error, :not_found} ->
+        {:error, "Workflow not found: #{workflow_id}"}
+
+      workflow ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
     end
   end
 

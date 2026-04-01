@@ -1,18 +1,39 @@
 defmodule ClawCode do
-  @moduledoc """
-  Documentation for `ClawCode`.
-  """
+  @moduledoc false
 
-  @doc """
-  Hello world.
+  def project_root do
+    Path.expand("..", __DIR__)
+  end
 
-  ## Examples
+  def repo_root do
+    Path.expand("..", project_root())
+  end
 
-      iex> ClawCode.hello()
-      :world
+  def source_root do
+    Path.join(project_root(), "lib/claw_code")
+  end
 
-  """
-  def hello do
-    :world
+  def test_root do
+    Path.join(project_root(), "test")
+  end
+
+  def assets_root do
+    Path.join(repo_root(), "assets")
+  end
+
+  def archive_root do
+    Path.join(repo_root(), "archive/claude_code_ts_snapshot/src")
+  end
+
+  def reference_data_root do
+    Path.join(repo_root(), "src/reference_data")
+  end
+
+  def subsystem_snapshot_root do
+    Path.join(reference_data_root(), "subsystems")
+  end
+
+  def session_root do
+    Path.join(project_root(), ".port_sessions")
   end
 end

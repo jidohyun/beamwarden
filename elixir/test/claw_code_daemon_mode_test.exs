@@ -1,4 +1,4 @@
-defmodule ClawCodeDaemonModeTest do
+defmodule BeamwardenDaemonModeTest do
   use ExUnit.Case, async: false
 
   setup do
@@ -15,7 +15,7 @@ defmodule ClawCodeDaemonModeTest do
     configure_daemon!(client_a.node, daemon_label, cookie)
     configure_daemon!(client_b.node, daemon_label, cookie)
 
-    assert {:ok, _status} = :rpc.call(daemon.node, ClawCode.Daemon, :start_server, [[]])
+    assert {:ok, _status} = :rpc.call(daemon.node, Beamwarden.Daemon, :start_server, [[]])
 
     on_exit(fn ->
       stop_peer(client_b)
@@ -35,30 +35,33 @@ defmodule ClawCodeDaemonModeTest do
     on_exit(fn -> cleanup_remote_session(daemon.node, session_id) end)
 
     assert {:ok, daemon_status} =
-             :rpc.call(client_a.node, ClawCode.CLI, :run, [["daemon-status"]])
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [["daemon-status"]])
 
     assert daemon_status =~ "role=client"
     assert daemon_status =~ "daemon_reachable=true"
     assert daemon_status =~ "configured_daemon_node=#{Atom.to_string(daemon.node)}"
 
-    assert {:ok, server_status} = :rpc.call(daemon.node, ClawCode.CLI, :run, [["daemon-status"]])
+    assert {:ok, server_status} =
+             :rpc.call(daemon.node, Beamwarden.CLI, :run, [["daemon-status"]])
+
     assert server_status =~ "role=server"
 
     assert {:ok, output} =
-             :rpc.call(client_a.node, ClawCode.CLI, :run, [
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [
                ["start-session", "--id", session_id, "review MCP tool"]
              ])
 
     assert output =~ "session_id=#{session_id}"
     assert output =~ "owner_node=#{Atom.to_string(daemon.node)}"
 
-    assert :rpc.call(daemon.node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) != []
+    assert :rpc.call(daemon.node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) !=
+             []
 
-    assert :rpc.call(client_a.node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) ==
+    assert :rpc.call(client_a.node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) ==
              []
 
     assert {:ok, status_output} =
-             :rpc.call(client_b.node, ClawCode.CLI, :run, [["session-status", session_id]])
+             :rpc.call(client_b.node, Beamwarden.CLI, :run, [["session-status", session_id]])
 
     assert status_output =~ "session_id=#{session_id}"
     assert status_output =~ "turns=1"
@@ -74,7 +77,7 @@ defmodule ClawCodeDaemonModeTest do
     on_exit(fn -> cleanup_remote_workflow(daemon.node, workflow_id) end)
 
     assert {:ok, output} =
-             :rpc.call(client_a.node, ClawCode.CLI, :run, [
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [
                ["start-workflow", workflow_id, "bootstrap session"]
              ])
 
@@ -82,17 +85,17 @@ defmodule ClawCodeDaemonModeTest do
     assert output =~ "owner_node=#{Atom.to_string(daemon.node)}"
     assert output =~ "[pending] 1 — bootstrap session"
 
-    assert :rpc.call(daemon.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) !=
+    assert :rpc.call(daemon.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) !=
              []
 
-    assert :rpc.call(client_a.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) ==
+    assert :rpc.call(client_a.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) ==
              []
 
-    assert :rpc.call(client_b.node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) ==
+    assert :rpc.call(client_b.node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) ==
              []
 
     assert {:ok, advance_output} =
-             :rpc.call(client_b.node, ClawCode.CLI, :run, [
+             :rpc.call(client_b.node, Beamwarden.CLI, :run, [
                ["advance-task", workflow_id, "1", "completed", "done"]
              ])
 
@@ -100,7 +103,7 @@ defmodule ClawCodeDaemonModeTest do
     assert advance_output =~ "[completed] 1 — bootstrap session (done)"
 
     assert {:ok, status_output} =
-             :rpc.call(client_a.node, ClawCode.CLI, :run, [["workflow-status", workflow_id]])
+             :rpc.call(client_a.node, Beamwarden.CLI, :run, [["workflow-status", workflow_id]])
 
     assert status_output =~ "workflow_id=#{workflow_id}"
     assert status_output =~ "owner_node=#{Atom.to_string(daemon.node)}"
@@ -129,35 +132,36 @@ defmodule ClawCodeDaemonModeTest do
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
     assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
-    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
+    assert :ok = :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, [])
     %{peer: peer, node: peer_node}
   end
 
   defp configure_daemon!(target_node, daemon_label, cookie) do
     assert :ok =
-             :rpc.call(target_node, ClawCode.AppIdentity, :put_env, [:daemon_node, daemon_label])
+             :rpc.call(target_node, Beamwarden.AppIdentity, :put_env, [:daemon_node, daemon_label])
 
-    assert :ok = :rpc.call(target_node, ClawCode.AppIdentity, :put_env, [:daemon_cookie, cookie])
+    assert :ok =
+             :rpc.call(target_node, Beamwarden.AppIdentity, :put_env, [:daemon_cookie, cookie])
   end
 
   defp cleanup_remote_session(target_node, session_id) do
-    case :rpc.call(target_node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) do
-      [{_pid, _value}] -> :rpc.call(target_node, ClawCode.SessionServer, :stop, [session_id])
+    case :rpc.call(target_node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) do
+      [{_pid, _value}] -> :rpc.call(target_node, Beamwarden.SessionServer, :stop, [session_id])
       [] -> :ok
       {:badrpc, _reason} -> :ok
     end
 
-    File.rm(ClawCode.session_path(session_id))
+    File.rm(Beamwarden.session_path(session_id))
   end
 
   defp cleanup_remote_workflow(target_node, workflow_id) do
-    case :rpc.call(target_node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) do
-      [{_pid, _value}] -> :rpc.call(target_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+    case :rpc.call(target_node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) do
+      [{_pid, _value}] -> :rpc.call(target_node, Beamwarden.WorkflowServer, :stop, [workflow_id])
       [] -> :ok
       {:badrpc, _reason} -> :ok
     end
 
-    File.rm(ClawCode.workflow_path(workflow_id))
+    File.rm(Beamwarden.workflow_path(workflow_id))
   end
 
   defp stop_peer(%{peer: peer}) do

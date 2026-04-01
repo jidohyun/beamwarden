@@ -81,7 +81,7 @@ In short: this is a strong **research/runtime port**, not a finished clone of th
 ```text
 .
 ├── elixir/                       # Primary Mix/OTP workspace
-│   ├── lib/claw_code
+│   ├── lib/beamwarden
 │   └── test
 ├── reference/
 │   ├── python/                   # Historical Python mirror subtree
@@ -194,16 +194,16 @@ Planning/history docs:
 
 Key runtime files:
 
-- `elixir/lib/claw_code/cli.ex` — CLI surface
-- `elixir/lib/claw_code/runtime.ex` — structural runtime mirror
-- `elixir/lib/claw_code/query_engine.ex` — turn/session engine
-- `elixir/lib/claw_code/control_plane.ex` — session/workflow orchestration facade
-- `elixir/lib/claw_code/daemon.ex` — daemon-mode bootstrapping and proxy logic
-- `elixir/lib/claw_code/daemon_supervisor.ex` — daemon-root supervision boundary
-- `elixir/lib/claw_code/daemon_node_monitor.ex` — node membership monitoring/reconciliation
-- `elixir/lib/claw_code/cluster_daemon.ex` — ledger/runtime bookkeeping
-- `elixir/lib/claw_code/session_server.ex` — supervised session worker
-- `elixir/lib/claw_code/workflow_server.ex` — supervised workflow worker
+- `elixir/lib/beamwarden/cli.ex` — CLI surface
+- `elixir/lib/beamwarden/runtime.ex` — structural runtime mirror
+- `elixir/lib/beamwarden/query_engine.ex` — turn/session engine
+- `elixir/lib/beamwarden/control_plane.ex` — session/workflow orchestration facade
+- `elixir/lib/beamwarden/daemon.ex` — daemon-mode bootstrapping and proxy logic
+- `elixir/lib/beamwarden/daemon_supervisor.ex` — daemon-root supervision boundary
+- `elixir/lib/beamwarden/daemon_node_monitor.ex` — node membership monitoring/reconciliation
+- `elixir/lib/beamwarden/cluster_daemon.ex` — ledger/runtime bookkeeping
+- `elixir/lib/beamwarden/session_server.ex` — supervised session worker
+- `elixir/lib/beamwarden/workflow_server.ex` — supervised workflow worker
 
 Mirrored inventory files:
 

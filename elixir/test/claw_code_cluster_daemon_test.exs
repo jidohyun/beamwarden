@@ -1,4 +1,4 @@
-defmodule ClawCodeClusterDaemonTest do
+defmodule BeamwardenClusterDaemonTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
@@ -12,29 +12,32 @@ defmodule ClawCodeClusterDaemonTest do
     session_id = unique_id("daemon-ledger")
     on_exit(fn -> cleanup_local_session(session_id) end)
 
-    {:ok, _pid} = ClawCode.ControlPlane.ensure_session(session_id)
-    assert %{owner_node: owner_node} = ClawCode.ClusterDaemon.local_record(:session, session_id)
-    assert owner_node == ClawCode.Cluster.local_owner_label()
+    {:ok, _pid} = Beamwarden.ControlPlane.ensure_session(session_id)
+    assert %{owner_node: owner_node} = Beamwarden.ClusterDaemon.local_record(:session, session_id)
+    assert owner_node == Beamwarden.Cluster.local_owner_label()
 
-    File.rm(ClawCode.session_path(session_id))
+    File.rm(Beamwarden.session_path(session_id))
 
-    daemon_pid = Process.whereis(ClawCode.ClusterDaemon)
+    daemon_pid = Process.whereis(Beamwarden.ClusterDaemon)
     assert is_pid(daemon_pid)
     ref = Process.monitor(daemon_pid)
-    assert :ok = Supervisor.terminate_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
+
+    assert :ok =
+             Supervisor.terminate_child(Beamwarden.ClusterSupervisor, Beamwarden.ClusterDaemon)
+
     assert_receive {:DOWN, ^ref, :process, ^daemon_pid, _reason}, 5_000
 
     assert {:ok, _pid} =
-             Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
+             Supervisor.restart_child(Beamwarden.ClusterSupervisor, Beamwarden.ClusterDaemon)
 
-    wait_until(fn -> match?(%{}, ClawCode.ClusterDaemon.local_record(:session, session_id)) end)
+    wait_until(fn -> match?(%{}, Beamwarden.ClusterDaemon.local_record(:session, session_id)) end)
 
     assert %{identifier: ^session_id, owner_node: ^owner_node} =
-             ClawCode.ClusterDaemon.local_record(:session, session_id)
+             Beamwarden.ClusterDaemon.local_record(:session, session_id)
 
     status_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["cluster-status"])
+        assert 0 == Beamwarden.CLI.main(["cluster-status"])
       end)
 
     assert status_output =~ "daemon_mode=supervised DETS-backed ownership ledger"
@@ -51,11 +54,11 @@ defmodule ClawCodeClusterDaemonTest do
       stop_peer(peer)
     end)
 
-    {:ok, first_snapshot} = ClawCode.ControlPlane.submit_prompt(session_id, "review MCP tool")
+    {:ok, first_snapshot} = Beamwarden.ControlPlane.submit_prompt(session_id, "review MCP tool")
     assert first_snapshot.owner_node == Atom.to_string(peer_node)
 
     assert %{owner_node: owner_before, epoch: epoch_before} =
-             ClawCode.ClusterDaemon.local_record(:session, session_id)
+             Beamwarden.ClusterDaemon.local_record(:session, session_id)
 
     assert owner_before == Atom.to_string(peer_node)
 
@@ -63,13 +66,13 @@ defmodule ClawCodeClusterDaemonTest do
     wait_until(fn -> peer_node not in Node.list() end)
 
     {:ok, second_snapshot} =
-      ClawCode.ControlPlane.submit_prompt(session_id, "review MCP tool again")
+      Beamwarden.ControlPlane.submit_prompt(session_id, "review MCP tool again")
 
     assert second_snapshot.owner_node == Atom.to_string(node())
     assert second_snapshot.turns == 2
 
     assert %{owner_node: owner_after, epoch: epoch_after} =
-             ClawCode.ClusterDaemon.local_record(:session, session_id)
+             Beamwarden.ClusterDaemon.local_record(:session, session_id)
 
     assert owner_after == Atom.to_string(node())
     assert epoch_after > epoch_before
@@ -86,7 +89,7 @@ defmodule ClawCodeClusterDaemonTest do
     end)
 
     assert {:ok, first_snapshot} =
-             ClawCode.ControlPlane.add_workflow_step(
+             Beamwarden.ControlPlane.add_workflow_step(
                workflow_id,
                "heal cluster",
                "before failover"
@@ -95,7 +98,7 @@ defmodule ClawCodeClusterDaemonTest do
     assert first_snapshot.owner_node == Atom.to_string(peer_node)
 
     assert %{owner_node: owner_before, epoch: epoch_before} =
-             ClawCode.ClusterDaemon.local_record(:workflow, workflow_id)
+             Beamwarden.ClusterDaemon.local_record(:workflow, workflow_id)
 
     assert owner_before == Atom.to_string(peer_node)
 
@@ -103,13 +106,13 @@ defmodule ClawCodeClusterDaemonTest do
     wait_until(fn -> peer_node not in Node.list() end)
 
     assert {:ok, second_snapshot} =
-             ClawCode.ControlPlane.complete_workflow_step(workflow_id, "1")
+             Beamwarden.ControlPlane.complete_workflow_step(workflow_id, "1")
 
     assert second_snapshot.owner_node == Atom.to_string(node())
     assert [%{"status" => "completed", "title" => "heal cluster"}] = second_snapshot.steps
 
     assert %{owner_node: owner_after, epoch: epoch_after} =
-             ClawCode.ClusterDaemon.local_record(:workflow, workflow_id)
+             Beamwarden.ClusterDaemon.local_record(:workflow, workflow_id)
 
     assert owner_after == Atom.to_string(node())
     assert epoch_after > epoch_before
@@ -137,7 +140,7 @@ defmodule ClawCodeClusterDaemonTest do
 
     true = Node.connect(peer_node)
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
-    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
+    assert :ok = :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, [])
     %{peer: peer, node: peer_node}
   end
 
@@ -153,24 +156,24 @@ defmodule ClawCodeClusterDaemonTest do
       "#{scope}-#{suffix}"
     end)
     |> Enum.find(fn identifier ->
-      ClawCode.Cluster.owner_node(scope, identifier) == expected_node
+      Beamwarden.Cluster.owner_node(scope, identifier) == expected_node
     end)
   end
 
   defp cleanup_local_session(session_id) do
-    if Registry.lookup(ClawCode.SessionRegistry, session_id) != [] do
-      ClawCode.SessionServer.stop(session_id)
+    if Registry.lookup(Beamwarden.SessionRegistry, session_id) != [] do
+      Beamwarden.SessionServer.stop(session_id)
     end
 
-    File.rm(ClawCode.session_path(session_id))
+    File.rm(Beamwarden.session_path(session_id))
   end
 
   defp cleanup_local_workflow(workflow_id) do
-    if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
-      ClawCode.WorkflowServer.stop(workflow_id)
+    if Registry.lookup(Beamwarden.WorkflowRegistry, workflow_id) != [] do
+      Beamwarden.WorkflowServer.stop(workflow_id)
     end
 
-    File.rm(ClawCode.workflow_path(workflow_id))
+    File.rm(Beamwarden.workflow_path(workflow_id))
   end
 
   defp wait_until(fun, attempts \\ 50)

@@ -1,4 +1,4 @@
-defmodule ClawCodeDistributedTest do
+defmodule BeamwardenDistributedTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
@@ -13,7 +13,7 @@ defmodule ClawCodeDistributedTest do
   test "peer node can bootstrap claw_code and run control-plane status", %{
     peer: %{node: peer_node}
   } do
-    assert {:ok, output} = :rpc.call(peer_node, ClawCode.CLI, :run, [["control-plane-status"]])
+    assert {:ok, output} = :rpc.call(peer_node, Beamwarden.CLI, :run, [["control-plane-status"]])
     assert output =~ "# OTP Control Plane"
     assert output =~ "Cluster mode: distributed"
     assert output =~ "Cluster members:"
@@ -26,10 +26,10 @@ defmodule ClawCodeDistributedTest do
     on_exit(fn -> cleanup_remote_session(peer_node, session_id) end)
 
     assert {:ok, _pid} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :ensure_session, [session_id])
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :ensure_session, [session_id])
 
     assert {:ok, snapshot} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :submit_prompt, [
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :submit_prompt, [
                session_id,
                "review MCP tool"
              ])
@@ -38,20 +38,20 @@ defmodule ClawCodeDistributedTest do
     assert snapshot.turns == 1
 
     assert {:ok, session_output} =
-             :rpc.call(peer_node, ClawCode.CLI, :run, [["session-status", session_id]])
+             :rpc.call(peer_node, Beamwarden.CLI, :run, [["session-status", session_id]])
 
     assert session_output =~ "session_id=#{session_id}"
     assert session_output =~ "turns=1"
 
     assert {:ok, remote_status} =
-             :rpc.call(peer_node, ClawCode.CLI, :run, [["control-plane-status"]])
+             :rpc.call(peer_node, Beamwarden.CLI, :run, [["control-plane-status"]])
 
     assert remote_status =~ "session=#{session_id}"
 
-    local_status = capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
+    local_status = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["control-plane-status"]) end)
     assert local_status =~ session_id
 
-    assert File.exists?(Path.join(ClawCode.session_root(), "#{session_id}.json"))
+    assert File.exists?(Path.join(Beamwarden.session_root(), "#{session_id}.json"))
   end
 
   test "remote workflow lifecycle stays isolated from local registries", %{
@@ -61,12 +61,12 @@ defmodule ClawCodeDistributedTest do
     on_exit(fn -> cleanup_remote_workflow(peer_node, workflow_id) end)
 
     assert {:ok, snapshot} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :start_workflow, [workflow_id, []])
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :start_workflow, [workflow_id, []])
 
     assert snapshot.workflow_id == workflow_id
 
     assert {:ok, updated} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :add_workflow_step, [
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :add_workflow_step, [
                workflow_id,
                "bootstrap session"
              ])
@@ -74,7 +74,7 @@ defmodule ClawCodeDistributedTest do
     assert [%{"title" => "bootstrap session", "status" => "pending"}] = updated.steps
 
     assert {:ok, completed} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :complete_workflow_step, [
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :complete_workflow_step, [
                workflow_id,
                "1"
              ])
@@ -82,20 +82,20 @@ defmodule ClawCodeDistributedTest do
     assert [%{"status" => "completed"}] = completed.steps
 
     assert {:ok, workflow_output} =
-             :rpc.call(peer_node, ClawCode.CLI, :run, [["workflow-status", workflow_id]])
+             :rpc.call(peer_node, Beamwarden.CLI, :run, [["workflow-status", workflow_id]])
 
     assert workflow_output =~ "workflow_id=#{workflow_id}"
     assert workflow_output =~ "[completed] 1 — bootstrap session"
 
     assert {:ok, remote_status} =
-             :rpc.call(peer_node, ClawCode.CLI, :run, [["control-plane-status"]])
+             :rpc.call(peer_node, Beamwarden.CLI, :run, [["control-plane-status"]])
 
     assert remote_status =~ "workflow=#{workflow_id}"
 
-    local_status = capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
+    local_status = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["control-plane-status"]) end)
     assert local_status =~ workflow_id
 
-    assert File.exists?(ClawCode.workflow_path(workflow_id))
+    assert File.exists?(Beamwarden.workflow_path(workflow_id))
   end
 
   defp ensure_local_distribution! do
@@ -120,7 +120,7 @@ defmodule ClawCodeDistributedTest do
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
     assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
-    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
+    assert :ok = :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, [])
 
     %{peer: peer, node: peer_node}
   end
@@ -132,23 +132,23 @@ defmodule ClawCodeDistributedTest do
   end
 
   defp cleanup_remote_session(peer_node, session_id) do
-    case :rpc.call(peer_node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) do
-      [{_pid, _value}] -> :rpc.call(peer_node, ClawCode.SessionServer, :stop, [session_id])
+    case :rpc.call(peer_node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) do
+      [{_pid, _value}] -> :rpc.call(peer_node, Beamwarden.SessionServer, :stop, [session_id])
       [] -> :ok
       {:badrpc, _reason} -> :ok
     end
 
-    File.rm(Path.join(ClawCode.session_root(), "#{session_id}.json"))
+    File.rm(Path.join(Beamwarden.session_root(), "#{session_id}.json"))
   end
 
   defp cleanup_remote_workflow(peer_node, workflow_id) do
-    case :rpc.call(peer_node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) do
-      [{_pid, _value}] -> :rpc.call(peer_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+    case :rpc.call(peer_node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) do
+      [{_pid, _value}] -> :rpc.call(peer_node, Beamwarden.WorkflowServer, :stop, [workflow_id])
       [] -> :ok
       {:badrpc, _reason} -> :ok
     end
 
-    File.rm(ClawCode.workflow_path(workflow_id))
+    File.rm(Beamwarden.workflow_path(workflow_id))
   end
 
   defp unique_id(prefix) do

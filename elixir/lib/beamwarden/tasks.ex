@@ -1,0 +1,57 @@
+defmodule Beamwarden.Tasks do
+  @moduledoc false
+
+  alias Beamwarden.PortingTask
+
+  def default_tasks do
+    [
+      %PortingTask{
+        id: "task-1",
+        title: "root-module-parity",
+        description: "Mirror remaining Python root modules"
+      },
+      %PortingTask{
+        id: "task-2",
+        title: "otp-control-plane",
+        description: "Ship supervised session/workflow helpers"
+      },
+      %PortingTask{
+        id: "task-3",
+        title: "elixir-first-docs",
+        description: "Keep README/docs aligned with shipped behavior"
+      }
+    ]
+  end
+
+  def from_descriptions(descriptions) do
+    descriptions
+    |> Enum.with_index(1)
+    |> Enum.map(fn {description, index} ->
+      %PortingTask{
+        id: "task-#{index}",
+        title: description,
+        description: description
+      }
+    end)
+  end
+
+  def build_default_backlog do
+    [
+      %PortingTask{
+        id: "session-control-plane",
+        title: "Supervised session orchestration",
+        description: "Keep resumable session state inside OTP processes."
+      },
+      %PortingTask{
+        id: "workflow-control-plane",
+        title: "Workflow/task orchestration",
+        description: "Coordinate long-running task state with OTP processes."
+      },
+      %PortingTask{
+        id: "mirror-surface",
+        title: "Mirror remaining Python surface concepts",
+        description: "Preserve the clean-room mirror shape in Elixir modules."
+      }
+    ]
+  end
+end

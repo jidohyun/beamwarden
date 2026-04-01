@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Beamwarden do
 
   @impl true
   def run(args) do
-    status = ClawCode.CLI.main(args)
+    status = Beamwarden.CLI.main(args)
     if status != 0, do: System.halt(status)
   end
 end

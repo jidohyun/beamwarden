@@ -1,23 +1,23 @@
-defmodule ClawCodePortTest do
+defmodule BeamwardenPortTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
 
   test "manifest counts elixir files" do
-    manifest = ClawCode.PortManifest.build()
+    manifest = Beamwarden.PortManifest.build()
     assert manifest.total_elixir_files >= 10
     assert manifest.top_level_modules != []
   end
 
   test "summary mentions workspace" do
-    summary = ClawCode.QueryEngine.from_workspace() |> ClawCode.QueryEngine.render_summary()
+    summary = Beamwarden.QueryEngine.from_workspace() |> Beamwarden.QueryEngine.render_summary()
     assert summary =~ "Elixir Porting Workspace Summary"
     assert summary =~ "Command surface:"
     assert summary =~ "Tool surface:"
   end
 
   test "cli summary runs" do
-    output = capture_io(fn -> assert 0 == ClawCode.CLI.main(["summary"]) end)
+    output = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["summary"]) end)
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
@@ -33,40 +33,40 @@ defmodule ClawCodePortTest do
   end
 
   test "app identity helper keeps beamwarden as the live runtime app" do
-    assert ClawCode.AppIdentity.runtime_app() == :beamwarden
-    assert ClawCode.AppIdentity.legacy_app() == :claw_code
-    assert :ok = ClawCode.AppIdentity.ensure_runtime_started()
+    assert Beamwarden.AppIdentity.runtime_app() == :beamwarden
+    assert Beamwarden.AppIdentity.legacy_app() == :claw_code
+    assert :ok = Beamwarden.AppIdentity.ensure_runtime_started()
   end
 
   test "parity audit runs" do
-    output = capture_io(fn -> assert 0 == ClawCode.CLI.main(["parity-audit"]) end)
+    output = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["parity-audit"]) end)
     assert output =~ "Parity Audit"
   end
 
   test "command and tool snapshots are nontrivial" do
-    assert length(ClawCode.Commands.ported_commands()) >= 150
-    assert length(ClawCode.Tools.ported_tools()) >= 100
+    assert length(Beamwarden.Commands.ported_commands()) >= 150
+    assert length(Beamwarden.Tools.ported_tools()) >= 100
   end
 
   test "elixir workspace owns copied reference snapshots" do
-    assert Path.expand(ClawCode.reference_data_root()) ==
-             Path.expand(Path.join(ClawCode.project_root(), "priv/reference_data"))
+    assert Path.expand(Beamwarden.reference_data_root()) ==
+             Path.expand(Path.join(Beamwarden.project_root(), "priv/reference_data"))
 
-    assert File.exists?(Path.join(ClawCode.reference_data_root(), "commands_snapshot.json"))
-    assert File.exists?(Path.join(ClawCode.reference_data_root(), "tools_snapshot.json"))
-    assert length(ClawCode.ReferenceData.subsystem_snapshots()) >= 10
-    refute String.contains?(ClawCode.reference_data_root(), "reference/python")
+    assert File.exists?(Path.join(Beamwarden.reference_data_root(), "commands_snapshot.json"))
+    assert File.exists?(Path.join(Beamwarden.reference_data_root(), "tools_snapshot.json"))
+    assert length(Beamwarden.ReferenceData.subsystem_snapshots()) >= 10
+    refute String.contains?(Beamwarden.reference_data_root(), "reference/python")
   end
 
   test "commands and tools cli run" do
     commands_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["commands", "--limit", "5", "--query", "review"])
+        assert 0 == Beamwarden.CLI.main(["commands", "--limit", "5", "--query", "review"])
       end)
 
     tools_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["tools", "--limit", "5", "--query", "MCP"])
+        assert 0 == Beamwarden.CLI.main(["tools", "--limit", "5", "--query", "MCP"])
       end)
 
     assert commands_output =~ "Command entries:"
@@ -76,11 +76,13 @@ defmodule ClawCodePortTest do
   test "route and show entry cli run" do
     route_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["route", "review MCP tool", "--limit", "5"])
+        assert 0 == Beamwarden.CLI.main(["route", "review MCP tool", "--limit", "5"])
       end)
 
-    show_command = capture_io(fn -> assert 0 == ClawCode.CLI.main(["show-command", "review"]) end)
-    show_tool = capture_io(fn -> assert 0 == ClawCode.CLI.main(["show-tool", "MCPTool"]) end)
+    show_command =
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["show-command", "review"]) end)
+
+    show_tool = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["show-tool", "MCPTool"]) end)
 
     assert String.downcase(route_output) =~ "review"
     assert String.downcase(show_command) =~ "review"
@@ -90,7 +92,7 @@ defmodule ClawCodePortTest do
   test "bootstrap cli runs" do
     output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["bootstrap", "review MCP tool", "--limit", "5"])
+        assert 0 == Beamwarden.CLI.main(["bootstrap", "review MCP tool", "--limit", "5"])
       end)
 
     assert output =~ "Runtime Session"
@@ -99,16 +101,16 @@ defmodule ClawCodePortTest do
   end
 
   test "bootstrap session tracks turn state" do
-    session = ClawCode.Runtime.bootstrap_session("review MCP tool", limit: 5)
+    session = Beamwarden.Runtime.bootstrap_session("review MCP tool", limit: 5)
     assert length(session.turn_result.matched_tools) >= 1
     assert session.turn_result.output =~ "Prompt:"
     assert session.turn_result.usage.input_tokens >= 1
   end
 
   test "bootstrap persistence matches turn result usage" do
-    session = ClawCode.Runtime.bootstrap_session("review MCP tool", limit: 5)
+    session = Beamwarden.Runtime.bootstrap_session("review MCP tool", limit: 5)
     session_id = Path.basename(session.persisted_session_path, ".json")
-    stored = ClawCode.SessionStore.load_session(session_id)
+    stored = Beamwarden.SessionStore.load_session(session_id)
 
     assert stored.input_tokens == session.turn_result.usage.input_tokens
     assert stored.output_tokens == session.turn_result.usage.output_tokens
@@ -117,7 +119,7 @@ defmodule ClawCodePortTest do
   test "tool permission filtering cli runs" do
     output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["tools", "--limit", "10", "--deny-prefix", "mcp"])
+        assert 0 == Beamwarden.CLI.main(["tools", "--limit", "10", "--deny-prefix", "mcp"])
       end)
 
     assert output =~ "Tool entries:"
@@ -127,7 +129,7 @@ defmodule ClawCodePortTest do
   test "tool query path honors permission filtering" do
     output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["tools", "--query", "MCP", "--deny-prefix", "mcp"])
+        assert 0 == Beamwarden.CLI.main(["tools", "--query", "MCP", "--deny-prefix", "mcp"])
       end)
 
     refute output =~ "MCPTool"
@@ -137,7 +139,7 @@ defmodule ClawCodePortTest do
     output =
       capture_io(fn ->
         assert 0 ==
-                 ClawCode.CLI.main([
+                 Beamwarden.CLI.main([
                    "turn-loop",
                    "review MCP tool",
                    "--max-turns",
@@ -152,18 +154,18 @@ defmodule ClawCodePortTest do
 
   test "remote and direct mode clis run" do
     remote_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["remote-mode", "workspace"]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["remote-mode", "workspace"]) end)
 
-    ssh_output = capture_io(fn -> assert 0 == ClawCode.CLI.main(["ssh-mode", "workspace"]) end)
+    ssh_output = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["ssh-mode", "workspace"]) end)
 
     teleport_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["teleport-mode", "workspace"]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["teleport-mode", "workspace"]) end)
 
     direct_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["direct-connect-mode", "workspace"]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["direct-connect-mode", "workspace"]) end)
 
     deep_link_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["deep-link-mode", "workspace"]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["deep-link-mode", "workspace"]) end)
 
     assert remote_output =~ "mode=remote"
     assert ssh_output =~ "mode=ssh"
@@ -174,12 +176,14 @@ defmodule ClawCodePortTest do
 
   test "flush transcript and load session work" do
     output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["flush-transcript", "review MCP tool"]) end)
+      capture_io(fn ->
+        assert 0 == Beamwarden.CLI.main(["flush-transcript", "review MCP tool"])
+      end)
 
     [path, flushed_line] = output |> String.trim() |> String.split("\n")
     assert flushed_line =~ "flushed=true"
     session_id = Path.basename(path, ".json")
-    loaded = capture_io(fn -> assert 0 == ClawCode.CLI.main(["load-session", session_id]) end)
+    loaded = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["load-session", session_id]) end)
     assert loaded =~ session_id
     assert loaded =~ "messages"
   end
@@ -188,40 +192,40 @@ defmodule ClawCodePortTest do
     session_id = "demo-session-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-start", session_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["session-start", session_id]) end)
 
     submit_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["session-submit", session_id, "review MCP tool"])
+        assert 0 == Beamwarden.CLI.main(["session-submit", session_id, "review MCP tool"])
       end)
 
     status_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-status", session_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["session-status", session_id]) end)
 
     assert start_output =~ "Session Snapshot"
     assert submit_output =~ "turns=1"
     assert status_output =~ "session_id=#{session_id}"
-    assert File.exists?(Path.join(ClawCode.session_root(), "#{session_id}.json"))
+    assert File.exists?(Path.join(Beamwarden.session_root(), "#{session_id}.json"))
   end
 
   test "workflow control plane tracks steps" do
     workflow_id = "demo-flow-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-start", workflow_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["workflow-start", workflow_id]) end)
 
     add_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["workflow-add-step", workflow_id, "bootstrap session"])
+        assert 0 == Beamwarden.CLI.main(["workflow-add-step", workflow_id, "bootstrap session"])
       end)
 
     complete_output =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["workflow-complete-step", workflow_id, "1"])
+        assert 0 == Beamwarden.CLI.main(["workflow-complete-step", workflow_id, "1"])
       end)
 
     status_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["workflow-status", workflow_id]) end)
 
     assert start_output =~ "Workflow Snapshot"
     assert add_output =~ "bootstrap session"
@@ -234,7 +238,7 @@ defmodule ClawCodePortTest do
       ~w(cost_hook cost_tracker dialog_launchers ink interactive_helpers project_onboarding_state query repl_launcher task tasks tool)
 
     present =
-      ClawCode.source_root()
+      Beamwarden.source_root()
       |> Path.join("*.ex")
       |> Path.wildcard()
       |> Enum.map(&Path.basename(&1, ".ex"))
@@ -243,21 +247,21 @@ defmodule ClawCodePortTest do
   end
 
   test "command graph and tool pool cli run" do
-    command_graph = capture_io(fn -> assert 0 == ClawCode.CLI.main(["command-graph"]) end)
-    tool_pool = capture_io(fn -> assert 0 == ClawCode.CLI.main(["tool-pool"]) end)
+    command_graph = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["command-graph"]) end)
+    tool_pool = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["tool-pool"]) end)
     assert command_graph =~ "Command Graph"
     assert tool_pool =~ "Tool Pool"
   end
 
   test "companion cli commands surface the Elixir-first mirror helpers" do
-    dialogs = capture_io(fn -> assert 0 == ClawCode.CLI.main(["dialogs"]) end)
-    repl_banner = capture_io(fn -> assert 0 == ClawCode.CLI.main(["repl-banner"]) end)
-    default_tasks = capture_io(fn -> assert 0 == ClawCode.CLI.main(["default-tasks"]) end)
-    tool_defs = capture_io(fn -> assert 0 == ClawCode.CLI.main(["tool-definitions"]) end)
+    dialogs = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["dialogs"]) end)
+    repl_banner = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["repl-banner"]) end)
+    default_tasks = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["default-tasks"]) end)
+    tool_defs = capture_io(fn -> assert 0 == Beamwarden.CLI.main(["tool-definitions"]) end)
 
     query_route =
       capture_io(fn ->
-        assert 0 == ClawCode.CLI.main(["query-route", "review MCP tool", "--limit", "5"])
+        assert 0 == Beamwarden.CLI.main(["query-route", "review MCP tool", "--limit", "5"])
       end)
 
     assert dialogs =~ "control_plane"
@@ -275,7 +279,7 @@ defmodule ClawCodePortTest do
     start_output =
       capture_io(fn ->
         assert 0 ==
-                 ClawCode.CLI.main([
+                 Beamwarden.CLI.main([
                    "start-session",
                    "--id",
                    session_id,
@@ -286,7 +290,7 @@ defmodule ClawCodePortTest do
     submit_output =
       capture_io(fn ->
         assert 0 ==
-                 ClawCode.CLI.main([
+                 Beamwarden.CLI.main([
                    "submit-session",
                    session_id,
                    "review MCP tool",
@@ -296,10 +300,10 @@ defmodule ClawCodePortTest do
       end)
 
     status_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-status", session_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["session-status", session_id]) end)
 
     control_plane =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["control-plane-status"]) end)
 
     assert start_output =~ "session_id=#{session_id}"
     assert start_output =~ "persisted_session_path="
@@ -315,7 +319,7 @@ defmodule ClawCodePortTest do
     start_output =
       capture_io(fn ->
         assert 0 ==
-                 ClawCode.CLI.main([
+                 Beamwarden.CLI.main([
                    "start-workflow",
                    workflow_name,
                    "Update README",
@@ -334,7 +338,7 @@ defmodule ClawCodePortTest do
     advance_output =
       capture_io(fn ->
         assert 0 ==
-                 ClawCode.CLI.main([
+                 Beamwarden.CLI.main([
                    "advance-task",
                    workflow_id,
                    "1",
@@ -344,7 +348,7 @@ defmodule ClawCodePortTest do
       end)
 
     status_output =
-      capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
+      capture_io(fn -> assert 0 == Beamwarden.CLI.main(["workflow-status", workflow_id]) end)
 
     assert start_output =~ "name=#{workflow_name}"
     assert start_output =~ "Update README"
@@ -363,18 +367,18 @@ defmodule ClawCodePortTest do
   end
 
   defp maybe_stop_session(session_id) do
-    if Registry.lookup(ClawCode.SessionRegistry, session_id) != [] do
-      ClawCode.SessionServer.stop(session_id)
+    if Registry.lookup(Beamwarden.SessionRegistry, session_id) != [] do
+      Beamwarden.SessionServer.stop(session_id)
     end
 
-    File.rm(Path.join(ClawCode.session_root(), "#{session_id}.json"))
+    File.rm(Path.join(Beamwarden.session_root(), "#{session_id}.json"))
   end
 
   defp maybe_stop_workflow(workflow_id) do
-    if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
-      ClawCode.WorkflowServer.stop(workflow_id)
+    if Registry.lookup(Beamwarden.WorkflowRegistry, workflow_id) != [] do
+      Beamwarden.WorkflowServer.stop(workflow_id)
     end
 
-    File.rm(ClawCode.workflow_path(workflow_id))
+    File.rm(Beamwarden.workflow_path(workflow_id))
   end
 end

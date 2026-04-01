@@ -1,4 +1,4 @@
-defmodule ClawCodeClusterDurabilityTest do
+defmodule BeamwardenClusterDurabilityTest do
   use ExUnit.Case, async: false
 
   setup_all do
@@ -17,29 +17,29 @@ defmodule ClawCodeClusterDurabilityTest do
     on_exit(fn -> cleanup_session(session_id, peer_node) end)
 
     assert {:ok, _pid} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :ensure_local_session, [session_id])
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :ensure_local_session, [session_id])
 
     assert {:ok, remote_snapshot} =
-             :rpc.call(peer_node, ClawCode.ControlPlane, :submit_prompt_local, [
+             :rpc.call(peer_node, Beamwarden.ControlPlane, :submit_prompt_local, [
                session_id,
                "review MCP tool"
              ])
 
     assert remote_snapshot.owner_node == Atom.to_string(peer_node)
 
-    rewrite_owner_node!(ClawCode.session_path(session_id), Atom.to_string(node()))
+    rewrite_owner_node!(Beamwarden.session_path(session_id), Atom.to_string(node()))
 
-    assert ClawCode.ControlPlane.session_route_node(session_id) == peer_node
+    assert Beamwarden.ControlPlane.session_route_node(session_id) == peer_node
 
     assert {:ok, snapshot} =
-             ClawCode.ControlPlane.submit_prompt(session_id, "review tool execution")
+             Beamwarden.ControlPlane.submit_prompt(session_id, "review tool execution")
 
     assert snapshot.owner_node == Atom.to_string(peer_node)
     assert snapshot.turns == 2
-    assert Registry.lookup(ClawCode.SessionRegistry, session_id) == []
+    assert Registry.lookup(Beamwarden.SessionRegistry, session_id) == []
 
     remote_lookup =
-      :rpc.call(peer_node, Registry, :lookup, [ClawCode.SessionRegistry, session_id])
+      :rpc.call(peer_node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id])
 
     assert remote_lookup != []
   end
@@ -50,26 +50,31 @@ defmodule ClawCodeClusterDurabilityTest do
     workflow_id = unique_id("workflow-failover")
     on_exit(fn -> cleanup_workflow(workflow_id, peer_node) end)
 
-    ClawCode.WorkflowStore.save(%{
+    Beamwarden.WorkflowStore.save(%{
       workflow_id: workflow_id,
       steps: [],
       owner_node: "ghost@host"
     })
 
-    expected_target = ClawCode.Cluster.owner_node(:workflow, workflow_id)
+    expected_target = Beamwarden.Cluster.owner_node(:workflow, workflow_id)
 
-    assert expected_target in ClawCode.Cluster.member_nodes()
-    assert ClawCode.ControlPlane.workflow_route_node(workflow_id) == expected_target
+    assert expected_target in Beamwarden.Cluster.member_nodes()
+    assert Beamwarden.ControlPlane.workflow_route_node(workflow_id) == expected_target
 
     assert {:ok, snapshot} =
-             ClawCode.ControlPlane.add_workflow_step(workflow_id, "heal cluster", "fail over")
+             Beamwarden.ControlPlane.add_workflow_step(workflow_id, "heal cluster", "fail over")
 
     assert snapshot.owner_node == Atom.to_string(expected_target)
 
     assert [%{"title" => "heal cluster", "description" => "fail over", "status" => "pending"}] =
              snapshot.steps
 
-    assert_running_on_target!(expected_target, ClawCode.WorkflowRegistry, workflow_id, peer_node)
+    assert_running_on_target!(
+      expected_target,
+      Beamwarden.WorkflowRegistry,
+      workflow_id,
+      peer_node
+    )
   end
 
   test "local session state rehydrates after the session server crashes without session json", %{
@@ -79,24 +84,24 @@ defmodule ClawCodeClusterDurabilityTest do
     on_exit(fn -> cleanup_session(session_id, peer_node) end)
 
     assert {:ok, first_snapshot} =
-             ClawCode.ControlPlane.submit_prompt_local(session_id, "review MCP tool")
+             Beamwarden.ControlPlane.submit_prompt_local(session_id, "review MCP tool")
 
     assert first_snapshot.turns == 1
-    assert pid = lookup_pid(ClawCode.SessionRegistry, session_id)
-    File.rm!(ClawCode.session_path(session_id))
+    assert pid = lookup_pid(Beamwarden.SessionRegistry, session_id)
+    File.rm!(Beamwarden.session_path(session_id))
 
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
 
-    restarted_pid = wait_for_restarted_pid(ClawCode.SessionRegistry, session_id, pid)
+    restarted_pid = wait_for_restarted_pid(Beamwarden.SessionRegistry, session_id, pid)
     assert restarted_pid != pid
 
-    assert {:ok, second_snapshot} = ClawCode.ControlPlane.session_snapshot_local(session_id)
+    assert {:ok, second_snapshot} = Beamwarden.ControlPlane.session_snapshot_local(session_id)
     assert second_snapshot.turns == 1
 
     assert {:ok, third_snapshot} =
-             ClawCode.ControlPlane.submit_prompt_local(session_id, "review tool execution")
+             Beamwarden.ControlPlane.submit_prompt_local(session_id, "review tool execution")
 
     assert third_snapshot.turns == 2
   end
@@ -109,24 +114,24 @@ defmodule ClawCodeClusterDurabilityTest do
     on_exit(fn -> cleanup_workflow(workflow_id, peer_node) end)
 
     assert {:ok, first_snapshot} =
-             ClawCode.ControlPlane.add_workflow_step_local(workflow_id, "bootstrap session")
+             Beamwarden.ControlPlane.add_workflow_step_local(workflow_id, "bootstrap session")
 
     assert [%{"title" => "bootstrap session", "status" => "pending"}] = first_snapshot.steps
-    assert pid = lookup_pid(ClawCode.WorkflowRegistry, workflow_id)
-    File.rm!(ClawCode.workflow_path(workflow_id))
+    assert pid = lookup_pid(Beamwarden.WorkflowRegistry, workflow_id)
+    File.rm!(Beamwarden.workflow_path(workflow_id))
 
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
 
-    restarted_pid = wait_for_restarted_pid(ClawCode.WorkflowRegistry, workflow_id, pid)
+    restarted_pid = wait_for_restarted_pid(Beamwarden.WorkflowRegistry, workflow_id, pid)
     assert restarted_pid != pid
 
-    assert {:ok, second_snapshot} = ClawCode.ControlPlane.workflow_snapshot_local(workflow_id)
+    assert {:ok, second_snapshot} = Beamwarden.ControlPlane.workflow_snapshot_local(workflow_id)
     assert [%{"title" => "bootstrap session", "status" => "pending"}] = second_snapshot.steps
 
     assert {:ok, third_snapshot} =
-             ClawCode.ControlPlane.complete_workflow_step_local(workflow_id, "1")
+             Beamwarden.ControlPlane.complete_workflow_step_local(workflow_id, "1")
 
     assert [%{"title" => "bootstrap session", "status" => "completed"}] = third_snapshot.steps
   end
@@ -153,7 +158,7 @@ defmodule ClawCodeClusterDurabilityTest do
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
     assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
-    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
+    assert :ok = :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, [])
 
     %{peer: peer, node: peer_node}
   end
@@ -165,27 +170,27 @@ defmodule ClawCodeClusterDurabilityTest do
   end
 
   defp cleanup_session(session_id, peer_node) do
-    if Registry.lookup(ClawCode.SessionRegistry, session_id) != [] do
-      ClawCode.SessionServer.stop(session_id)
+    if Registry.lookup(Beamwarden.SessionRegistry, session_id) != [] do
+      Beamwarden.SessionServer.stop(session_id)
     end
 
-    if :rpc.call(peer_node, Registry, :lookup, [ClawCode.SessionRegistry, session_id]) != [] do
-      :rpc.call(peer_node, ClawCode.SessionServer, :stop, [session_id])
+    if :rpc.call(peer_node, Registry, :lookup, [Beamwarden.SessionRegistry, session_id]) != [] do
+      :rpc.call(peer_node, Beamwarden.SessionServer, :stop, [session_id])
     end
 
-    File.rm(ClawCode.session_path(session_id))
+    File.rm(Beamwarden.session_path(session_id))
   end
 
   defp cleanup_workflow(workflow_id, peer_node) do
-    if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
-      ClawCode.WorkflowServer.stop(workflow_id)
+    if Registry.lookup(Beamwarden.WorkflowRegistry, workflow_id) != [] do
+      Beamwarden.WorkflowServer.stop(workflow_id)
     end
 
-    if :rpc.call(peer_node, Registry, :lookup, [ClawCode.WorkflowRegistry, workflow_id]) != [] do
-      :rpc.call(peer_node, ClawCode.WorkflowServer, :stop, [workflow_id])
+    if :rpc.call(peer_node, Registry, :lookup, [Beamwarden.WorkflowRegistry, workflow_id]) != [] do
+      :rpc.call(peer_node, Beamwarden.WorkflowServer, :stop, [workflow_id])
     end
 
-    File.rm(ClawCode.workflow_path(workflow_id))
+    File.rm(Beamwarden.workflow_path(workflow_id))
   end
 
   defp rewrite_owner_node!(path, owner_node) do

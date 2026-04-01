@@ -105,7 +105,7 @@ The daemon-first control plane is intentionally conservative:
 - then it falls back to reachable persisted ownership metadata
 - finally it uses deterministic `:erlang.phash2/2` routing across connected members
 
-If `BEAMWARDEN_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix beamwarden daemon-status` (or `ClawCode.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case. The older `CLAW_*` env vars and `mix claw ...` remain available as compatibility fallbacks.
+If `BEAMWARDEN_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix beamwarden daemon-status` (or `Beamwarden.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case. The older `CLAW_*` env vars and `mix claw ...` remain available as compatibility fallbacks.
 
 ## Current limits
 

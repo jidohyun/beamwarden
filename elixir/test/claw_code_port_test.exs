@@ -158,7 +158,7 @@ defmodule ClawCodePortTest do
   end
 
   test "session control plane persists and reports state" do
-    session_id = "demo-session-#{System.unique_integer([:positive])}"
+    session_id = "demo-session-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
       capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-start", session_id]) end)
@@ -178,7 +178,7 @@ defmodule ClawCodePortTest do
   end
 
   test "workflow control plane tracks steps" do
-    workflow_id = "demo-flow-#{System.unique_integer([:positive])}"
+    workflow_id = "demo-flow-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
       capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-start", workflow_id]) end)
@@ -242,7 +242,7 @@ defmodule ClawCodePortTest do
   end
 
   test "control plane session lifecycle is exposed via mix claw" do
-    session_id = "session-" <> Integer.to_string(System.unique_integer([:positive]))
+    session_id = "session-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
     on_exit(fn -> maybe_stop_session(session_id) end)
 
     start_output =
@@ -283,7 +283,7 @@ defmodule ClawCodePortTest do
   end
 
   test "workflow lifecycle is exposed via mix claw" do
-    workflow_name = "port-docs-#{System.unique_integer([:positive])}"
+    workflow_name = "port-docs-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
       capture_io(fn ->
@@ -339,11 +339,15 @@ defmodule ClawCodePortTest do
     if Registry.lookup(ClawCode.SessionRegistry, session_id) != [] do
       ClawCode.SessionServer.stop(session_id)
     end
+
+    File.rm(Path.join(ClawCode.session_root(), "#{session_id}.json"))
   end
 
   defp maybe_stop_workflow(workflow_id) do
     if Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) != [] do
       ClawCode.WorkflowServer.stop(workflow_id)
     end
+
+    File.rm(ClawCode.workflow_path(workflow_id))
   end
 end

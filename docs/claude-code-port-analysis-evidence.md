@@ -2,6 +2,8 @@
 
 This appendix captures the concrete command outputs used to support `docs/claude-code-port-analysis.md`.
 
+Observed in `worker-1` on `2026-04-01` from worktree `./.omx/team/study-this-repository-starting/worktrees/worker-1`.
+
 ## Workspace manifest
 
 Command:

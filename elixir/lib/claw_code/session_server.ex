@@ -3,7 +3,14 @@ defmodule ClawCode.SessionServer do
 
   use GenServer
 
-  defstruct [:session_id, :engine, :last_result, :persisted_session_path]
+  defstruct [
+    :session_id,
+    :engine,
+    :last_result,
+    :last_stop_reason,
+    :persisted_session_path,
+    submits: 0
+  ]
 
   def child_spec(session_id) do
     %{
@@ -25,6 +32,10 @@ defmodule ClawCode.SessionServer do
     GenServer.call(via(session_id), :snapshot)
   end
 
+  def stop(session_id) do
+    GenServer.stop(via(session_id), :normal)
+  end
+
   @impl true
   def init(session_id) do
     engine =
@@ -33,7 +44,8 @@ defmodule ClawCode.SessionServer do
         false -> %{ClawCode.QueryEngine.from_workspace() | session_id: session_id}
       end
 
-    {:ok, %__MODULE__{session_id: session_id, engine: engine}}
+    {:ok,
+     %__MODULE__{session_id: session_id, engine: engine, submits: length(engine.mutable_messages)}}
   end
 
   @impl true
@@ -62,7 +74,16 @@ defmodule ClawCode.SessionServer do
       )
 
     {engine, path} = ClawCode.QueryEngine.persist_session(engine)
-    next_state = %{state | engine: engine, last_result: result, persisted_session_path: path}
+
+    next_state = %{
+      state
+      | engine: engine,
+        last_result: result,
+        last_stop_reason: result.stop_reason,
+        persisted_session_path: path,
+        submits: state.submits + 1
+    }
+
     {:reply, snapshot_map(next_state), next_state}
   end
 
@@ -76,6 +97,8 @@ defmodule ClawCode.SessionServer do
       session_id: state.session_id,
       turns: length(state.engine.mutable_messages),
       persisted_session_path: state.persisted_session_path,
+      submits: state.submits,
+      stop_reason: state.last_stop_reason || "none",
       usage: %{
         input_tokens: state.engine.total_usage.input_tokens,
         output_tokens: state.engine.total_usage.output_tokens

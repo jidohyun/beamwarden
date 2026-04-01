@@ -17,3 +17,13 @@ defmodule ClawCode.Query do
     }
   end
 end
+
+defmodule ClawCode.QueryRequest do
+  @moduledoc false
+  defstruct [:prompt]
+end
+
+defmodule ClawCode.QueryResponse do
+  @moduledoc false
+  defstruct [:text, :session_id, :stop_reason, matched_commands: [], matched_tools: []]
+end

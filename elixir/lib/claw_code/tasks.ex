@@ -4,13 +4,31 @@ defmodule ClawCode.Tasks do
   alias ClawCode.PortingTask
 
   def default_tasks do
-    build_default_backlog()
+    [
+      %PortingTask{
+        id: "task-1",
+        title: "root-module-parity",
+        description: "Mirror remaining Python root modules"
+      },
+      %PortingTask{
+        id: "task-2",
+        title: "otp-control-plane",
+        description: "Ship supervised session/workflow helpers"
+      },
+      %PortingTask{
+        id: "task-3",
+        title: "elixir-first-docs",
+        description: "Keep README/docs aligned with shipped behavior"
+      }
+    ]
   end
 
   def from_descriptions(descriptions) do
-    Enum.map(descriptions, fn description ->
+    descriptions
+    |> Enum.with_index(1)
+    |> Enum.map(fn {description, index} ->
       %PortingTask{
-        id: slug(description),
+        id: "task-#{index}",
         title: description,
         description: description
       }
@@ -35,12 +53,5 @@ defmodule ClawCode.Tasks do
         description: "Preserve the clean-room mirror shape in Elixir modules."
       }
     ]
-  end
-
-  defp slug(text) do
-    text
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/u, "-")
-    |> String.trim("-")
   end
 end

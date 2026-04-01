@@ -1,7 +1,10 @@
 defmodule ClawCode.CostTracker do
   @moduledoc false
 
-  defstruct usage: %ClawCode.UsageSummary{}, token_rate: 0.0
+  defstruct usage: %ClawCode.UsageSummary{},
+            token_rate: 0.0,
+            total_units: 0,
+            events: []
 
   def new(opts \\ []) do
     %__MODULE__{
@@ -13,5 +16,13 @@ defmodule ClawCode.CostTracker do
   def estimate_cost(%__MODULE__{} = tracker) do
     total_tokens = tracker.usage.input_tokens + tracker.usage.output_tokens
     total_tokens * tracker.token_rate
+  end
+
+  def record(%__MODULE__{} = tracker, label, units) do
+    %__MODULE__{
+      tracker
+      | total_units: tracker.total_units + units,
+        events: tracker.events ++ ["#{label}:#{units}"]
+    }
   end
 end

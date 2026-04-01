@@ -29,7 +29,16 @@ defmodule ClawCode.ControlPlane do
   end
 
   def submit_session(session_id, prompt, _opts \\ []) do
-    submit_prompt(session_id, prompt)
+    with {:ok, snapshot} <- submit_prompt(session_id, prompt) do
+      {:ok,
+       %{
+         text: snapshot.last_result || "",
+         session_id: snapshot.session_id,
+         stop_reason: snapshot.stop_reason || "completed",
+         matched_commands: [],
+         matched_tools: []
+       }}
+    end
   end
 
   def ensure_workflow(workflow_id) do
@@ -78,21 +87,8 @@ defmodule ClawCode.ControlPlane do
   end
 
   def advance_task(workflow_id, task_id, status, detail \\ nil) do
-    with {:ok, _pid} <- ensure_workflow(workflow_id),
-         snapshot <- ClawCode.WorkflowServer.snapshot(workflow_id) do
-      steps =
-        Enum.map(snapshot.steps, fn step ->
-          if step["id"] == task_id do
-            step
-            |> Map.put("status", status)
-            |> maybe_put_description(detail)
-          else
-            step
-          end
-        end)
-
-      path = ClawCode.WorkflowStore.save(%{snapshot | steps: steps})
-      {:ok, %{snapshot | steps: steps, persisted_workflow_path: path}}
+    with {:ok, _pid} <- ensure_workflow(workflow_id) do
+      {:ok, ClawCode.WorkflowServer.transition_step(workflow_id, task_id, status, detail)}
     end
   end
 
@@ -133,15 +129,51 @@ defmodule ClawCode.ControlPlane do
   end
 
   def render_session(snapshot) when is_map(snapshot) do
-    ["Session Snapshot", "", JSON.encode!(snapshot)]
+    [
+      "Session Snapshot",
+      "",
+      "session_id=#{snapshot.session_id}",
+      "turns=#{snapshot.turns}",
+      "submits=#{snapshot.submits || snapshot.turns}",
+      "stop_reason=#{snapshot.stop_reason || "none"}",
+      "persisted_session_path=#{snapshot.persisted_session_path || "none"}",
+      if(snapshot.last_result, do: "last_result=#{snapshot.last_result}", else: nil)
+    ]
+    |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 
   def render_workflow(snapshot) when is_map(snapshot) do
-    ["Workflow Snapshot", "", JSON.encode!(snapshot)]
+    [
+      "Workflow Snapshot",
+      "",
+      "workflow_id=#{snapshot.workflow_id}",
+      "name=#{snapshot.workflow_id}",
+      "status=#{workflow_status(snapshot.steps)}",
+      "task_count=#{length(snapshot.steps)}",
+      "tasks:",
+      Enum.map(snapshot.steps, &task_line/1)
+    ]
+    |> List.flatten()
     |> Enum.join("\n")
   end
 
-  defp maybe_put_description(step, nil), do: step
-  defp maybe_put_description(step, detail), do: Map.put(step, "description", detail)
+  defp workflow_status(steps) do
+    cond do
+      Enum.any?(steps, &(&1["status"] == "failed")) -> "failed"
+      steps != [] and Enum.all?(steps, &(&1["status"] == "completed")) -> "completed"
+      Enum.any?(steps, &(&1["status"] == "in_progress")) -> "in_progress"
+      true -> "pending"
+    end
+  end
+
+  defp task_line(step) do
+    base = "[#{step["status"]}] #{step["id"]} — #{step["title"]}"
+
+    case step["description"] do
+      nil -> base
+      "" -> base
+      detail -> "#{base} (#{detail})"
+    end
+  end
 end

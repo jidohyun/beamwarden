@@ -12,7 +12,6 @@ defmodule ClawCode.PortManifest do
     "commands.ex" => "command backlog metadata",
     "control_plane.ex" => "OTP-native session/workflow orchestration",
     "context.ex" => "workspace context counting",
-    "control_plane.ex" => "OTP control-plane facade",
     "cost_hook.ex" => "cost hook/report helpers",
     "cost_tracker.ex" => "usage/cost tracking helpers",
     "deferred_init.ex" => "trust-gated deferred init summary",

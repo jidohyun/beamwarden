@@ -49,9 +49,19 @@ defmodule ClawCode.CLI do
     end
   end
 
+  def run(["start-session", "--id", session_id, prompt]) do
+    with {:ok, _pid} <- ClawCode.ControlPlane.ensure_session(session_id),
+         {:ok, _snapshot} <- ClawCode.ControlPlane.submit_prompt(session_id, prompt),
+         {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
+      {:ok, ClawCode.ControlPlane.render_session(snapshot)}
+    else
+      {:error, reason} -> {:error, "Failed to start session: #{inspect(reason)}"}
+    end
+  end
+
   def run(["session-submit", session_id, prompt]) do
     with {:ok, snapshot} <- ClawCode.ControlPlane.submit_prompt(session_id, prompt) do
-      {:ok, render_snapshot("Session", snapshot)}
+      {:ok, ClawCode.ControlPlane.render_session(snapshot)}
     else
       {:error, reason} -> {:error, "Failed to submit prompt: #{inspect(reason)}"}
     end
@@ -117,32 +127,62 @@ defmodule ClawCode.CLI do
 
   def run(["workflow-start", workflow_id]) do
     case ClawCode.ControlPlane.start_workflow(workflow_id, []) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, reason} ->
-        {:error, "Failed to start workflow: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
     end
   end
 
   def run(["workflow-add-step", workflow_id, title]) do
     case ClawCode.ControlPlane.add_workflow_step(workflow_id, title) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, reason} ->
-        {:error, "Failed to add workflow step: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} -> {:error, "Failed to add workflow step: #{inspect(reason)}"}
     end
   end
 
   def run(["workflow-complete-step", workflow_id, step_id]) do
     case ClawCode.ControlPlane.complete_workflow_step(workflow_id, step_id) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, reason} ->
-        {:error, "Failed to complete workflow step: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} -> {:error, "Failed to complete workflow step: #{inspect(reason)}"}
     end
+  end
+
+  def run(["dialogs"]) do
+    {:ok, ClawCode.DialogLaunchers.render()}
+  end
+
+  def run(["repl-banner"]) do
+    {:ok, ClawCode.ReplLauncher.build_banner()}
+  end
+
+  def run(["default-tasks"]) do
+    {:ok,
+     ClawCode.Tasks.default_tasks()
+     |> Enum.map(&ClawCode.PortingTask.as_line/1)
+     |> Enum.join("\n")}
+  end
+
+  def run(["tool-definitions"]) do
+    {:ok,
+     ClawCode.ToolDefinition.default_tools()
+     |> ClawCode.ToolDefinition.as_lines()
+     |> Enum.join("\n")}
+  end
+
+  def run(["query-route", prompt | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
+    limit = opts[:limit] || 5
+    matches = ClawCode.Runtime.route_prompt(prompt, limit)
+
+    {:ok,
+     [
+       "# Query Engine Route",
+       "",
+       "Prompt: #{prompt}",
+       "Matches:",
+       Enum.map(matches, &"- [#{&1.kind}] #{&1.name} (#{&1.score}) — #{&1.source_hint}")
+     ]
+     |> List.flatten()
+     |> Enum.join("\n")}
   end
 
   def run(["workflow-status", workflow_id]) do

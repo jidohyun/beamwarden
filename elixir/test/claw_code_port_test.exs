@@ -172,8 +172,8 @@ defmodule ClawCodePortTest do
       capture_io(fn -> assert 0 == ClawCode.CLI.main(["session-status", session_id]) end)
 
     assert start_output =~ "Session Snapshot"
-    assert submit_output =~ "\"turns\":1"
-    assert status_output =~ "\"session_id\":\"#{session_id}\""
+    assert submit_output =~ "turns=1"
+    assert status_output =~ "session_id=#{session_id}"
     assert File.exists?(Path.join(ClawCode.session_root(), "#{session_id}.json"))
   end
 
@@ -197,9 +197,9 @@ defmodule ClawCodePortTest do
       capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
 
     assert start_output =~ "Workflow Snapshot"
-    assert add_output =~ "\"title\":\"bootstrap session\""
-    assert complete_output =~ "\"status\":\"completed\""
-    assert status_output =~ "\"workflow_id\":\"#{workflow_id}\""
+    assert add_output =~ "bootstrap session"
+    assert complete_output =~ "[completed] 1 — bootstrap session"
+    assert status_output =~ "workflow_id=#{workflow_id}"
   end
 
   test "missing python mirror concepts are represented in elixir files" do
@@ -283,12 +283,14 @@ defmodule ClawCodePortTest do
   end
 
   test "workflow lifecycle is exposed via mix claw" do
+    workflow_name = "port-docs-#{System.unique_integer([:positive])}"
+
     start_output =
       capture_io(fn ->
         assert 0 ==
                  ClawCode.CLI.main([
                    "start-workflow",
-                   "port-docs",
+                   workflow_name,
                    "Update README",
                    "Update docs"
                  ])
@@ -308,7 +310,7 @@ defmodule ClawCodePortTest do
                  ClawCode.CLI.main([
                    "advance-task",
                    workflow_id,
-                   "task-1",
+                   "1",
                    "completed",
                    "README refreshed"
                  ])
@@ -317,11 +319,11 @@ defmodule ClawCodePortTest do
     status_output =
       capture_io(fn -> assert 0 == ClawCode.CLI.main(["workflow-status", workflow_id]) end)
 
-    assert start_output =~ "name=port-docs"
-    assert start_output =~ "task-1"
+    assert start_output =~ "name=#{workflow_name}"
+    assert start_output =~ "Update README"
     assert advance_output =~ "README refreshed"
     assert status_output =~ "workflow_id=#{workflow_id}"
-    assert status_output =~ "[completed]"
+    assert status_output =~ "[completed] 1"
   end
 
   test "mix claw surfaces non-zero exit code for failures" do

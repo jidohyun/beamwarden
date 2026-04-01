@@ -73,6 +73,55 @@ The main source tree is now Python-first.
 
 The current Python workspace is not yet a complete one-to-one replacement for the original system, but the primary implementation surface is now Python.
 
+## How the Claude Code port maps into this Python tree
+
+This repository currently mirrors **architecture, inventory, and control-flow shape** more than it mirrors every runtime behavior. The fastest way to understand the port is to read it as a Python harness skeleton with archived-surface metadata attached.
+
+### 1. CLI and runtime architecture mapping
+
+- **CLI entrypoint:** `src/main.py` is the Python root command surface. It exposes summary, manifest, parity audit, bootstrap, routing, turn-loop, remote-mode, SSH, teleport, direct-connect, deep-link, and shim execution commands.
+- **Runtime orchestration:** `src/runtime.py` is the main Claude-Code-style control-flow mirror. It routes prompts across mirrored command/tool inventories, builds a runtime session, records setup/history, emits stream events, and runs bounded turn loops.
+- **Query/session loop:** `src/query_engine.py` models the per-turn engine. It tracks a session id, mutable transcript, permission denials, token-budget accounting, max-turn stopping, structured output retries, and session persistence.
+- **Startup/bootstrap:** `src/setup.py`, `src/prefetch.py`, `src/deferred_init.py`, `src/system_init.py`, and `src/bootstrap_graph.py` mirror the original startup story: prefetches first, then trust-gated deferred init, then command/tool loading, then the query loop.
+- **Mode branching:** `src/remote_runtime.py` and `src/direct_modes.py` provide the Python placeholders for remote / SSH / teleport / direct-connect / deep-link branching.
+
+### 2. SDK, prompt, tools, permissions, and control-flow porting
+
+- **Command surface:** `src/commands.py` loads `src/reference_data/commands_snapshot.json` and exposes lookup, filtering, and shim execution helpers. This is an inventory mirror of the archived command graph, not a full Python reimplementation of every command.
+- **Tool surface:** `src/tools.py` does the same for `src/reference_data/tools_snapshot.json`, including simple-mode filtering and MCP exclusion switches.
+- **Execution registry:** `src/execution_registry.py` wraps those mirrored command/tool entries so the runtime can "execute" them as descriptive shims during bootstrap and route simulations.
+- **Permissions model:** `src/permissions.py` and `src/tool_pool.py` implement deny-name / deny-prefix filtering. `src/runtime.py` also synthesizes explicit denials for shell-like tools such as `BashTool`, which keeps destructive execution gated in the Python port.
+- **Prompt handling:** `src/runtime.py` tokenizes a prompt, scores it against mirrored command/tool metadata, then hands the selected entries to `src/query_engine.py`, which records the turn and emits a Claude-Code-style result object.
+- **Session persistence:** `src/transcript.py` and `src/session_store.py` keep the replay/flush/persist pieces separate, so the Python port preserves the same broad "stateful agent session" shape even though the internals are much smaller.
+
+### 3. Rust extensions, tests, and remaining gaps versus Claude Code
+
+- **Rust/native extensions are not ported yet.** `src/native_ts/__init__.py` is only a metadata placeholder backed by `src/reference_data/subsystems/native_ts.json`. It documents the archived `native-ts` surface, but there is no compiled Rust/PyO3/maturin-style extension in this tree.
+- **Subsystem breadth is mostly placeholder breadth.** Packages such as `src/assistant`, `src/bridge`, `src/utils`, and the other top-level archived subsystem names expose snapshot metadata (`ARCHIVE_NAME`, `MODULE_COUNT`, `SAMPLE_FILES`) rather than runtime-equivalent Python implementations.
+- **The test suite is a strong smoke-test layer, not full parity validation.** `tests/test_porting_workspace.py` checks manifest generation, query-engine summaries, CLI commands, routing/bootstrap flows, snapshot counts, permission filtering, session persistence, and placeholder subsystem metadata. It does **not** prove that the Python tree can replace Claude Code end-to-end.
+- **Parity audit is inventory-oriented.** `src/parity_audit.py` compares Python filenames and directory names against an ignored local archive when present. On a checkout without that private archive, `python3 -m src.main parity-audit` correctly reports that comparison is unavailable.
+- **Current evidence on this branch:** `python3 -m src.main manifest` reports **66 Python files**; the mirrored snapshots contain **207 command entries** and **184 tool entries**; `python3 -m src.main setup-report` shows trust-gated deferred init with `plugin_init=True`, `skill_init=True`, `mcp_prefetch=True`, and `session_hooks=True`.
+
+## What is actually ported today
+
+The strongest parts of the current Python port are:
+
+- a coherent CLI shell around the port (`src/main.py`)
+- a small but internally consistent runtime/session model (`src/runtime.py`, `src/query_engine.py`)
+- mirrored command/tool inventories with lookup and filtering (`src/commands.py`, `src/tools.py`, `src/permissions.py`)
+- placeholder subsystem packages that preserve archive topology for future implementation work
+- smoke tests that keep the metadata-driven harness from regressing (`tests/test_porting_workspace.py`)
+
+The weakest parts — and therefore the biggest remaining gaps versus Claude Code — are:
+
+- most mirrored commands and tools are **descriptive shims**, not production implementations
+- remote/direct modes are placeholders
+- native/Rust-backed functionality is only documented as archived metadata
+- parity depends on a local ignored archive rather than a tracked, reproducible fixture
+- the Python tree still models the harness at a much higher level than the original system
+
+If you want the shortest honest summary: **the port has successfully recreated the outer harness structure and inventories in Python, but not yet the full executable depth of Claude Code.**
+
 ## Why this rewrite exists
 
 I originally studied the exposed codebase to understand its harness, tool wiring, and agent workflow. After spending more time with the legal and ethical questions—and after reading the essay linked below—I did not want the exposed snapshot itself to remain the main tracked source tree.

@@ -4,7 +4,7 @@ defmodule ClawCode.WorkflowStore do
   def save(snapshot) do
     File.mkdir_p!(ClawCode.workflow_root())
     path = ClawCode.workflow_path(snapshot.workflow_id)
-    File.write!(path, JSON.encode!(snapshot))
+    File.write!(path, JSON.encode!(Map.put_new(snapshot, :owner_node, current_owner_node())))
     path
   end
 
@@ -15,5 +15,16 @@ defmodule ClawCode.WorkflowStore do
       {:ok, contents} -> {:ok, JSON.decode!(contents)}
       {:error, :enoent} -> :error
     end
+  end
+
+  def owner_node(workflow_id) do
+    case load(workflow_id) do
+      {:ok, snapshot} -> snapshot["owner_node"]
+      :error -> nil
+    end
+  end
+
+  defp current_owner_node do
+    if Node.alive?(), do: Atom.to_string(node()), else: nil
   end
 end

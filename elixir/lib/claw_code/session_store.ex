@@ -1,6 +1,6 @@
 defmodule ClawCode.StoredSession do
   @moduledoc false
-  defstruct [:session_id, :messages, :input_tokens, :output_tokens]
+  defstruct [:session_id, :messages, :input_tokens, :output_tokens, :owner_node]
 end
 
 defmodule ClawCode.SessionStore do
@@ -16,7 +16,8 @@ defmodule ClawCode.SessionStore do
       session_id: session.session_id,
       messages: session.messages,
       input_tokens: session.input_tokens,
-      output_tokens: session.output_tokens
+      output_tokens: session.output_tokens,
+      owner_node: session.owner_node || current_owner_node()
     }
 
     File.write!(path, JSON.encode!(payload))
@@ -31,7 +32,26 @@ defmodule ClawCode.SessionStore do
       session_id: data["session_id"],
       messages: data["messages"],
       input_tokens: data["input_tokens"],
-      output_tokens: data["output_tokens"]
+      output_tokens: data["output_tokens"],
+      owner_node: data["owner_node"]
     }
+  end
+
+  def owner_node(session_id, directory \\ ClawCode.session_root()) do
+    path = Path.join(directory, "#{session_id}.json")
+
+    case File.read(path) do
+      {:ok, contents} ->
+        contents
+        |> JSON.decode!()
+        |> Map.get("owner_node")
+
+      {:error, :enoent} ->
+        nil
+    end
+  end
+
+  defp current_owner_node do
+    if Node.alive?(), do: Atom.to_string(node()), else: nil
   end
 end

@@ -84,6 +84,40 @@ defmodule ClawCode.CLI do
     {:ok, ClawCode.ControlPlane.status_report()}
   end
 
+  def run(["cluster-status"]) do
+    {:ok, ClawCode.Cluster.status_report()}
+  end
+
+  def run(["cluster-connect", target]) do
+    case ClawCode.Cluster.connect(target) do
+      {:ok, result} ->
+        {:ok, render_cluster_action("Cluster Connect", result)}
+
+      {:error, result} when is_map(result) ->
+        {:error, render_cluster_action("Cluster Connect", result)}
+
+      {:error, :local_node_not_distributed} ->
+        {:error, "Cluster connect requires a distributed node; start with --sname/--name first"}
+    end
+  end
+
+  def run(["cluster-disconnect", target]) do
+    case ClawCode.Cluster.disconnect(target) do
+      {:ok, result} ->
+        {:ok, render_cluster_action("Cluster Disconnect", result)}
+
+      {:error, result} when is_map(result) ->
+        {:error, render_cluster_action("Cluster Disconnect", result)}
+
+      {:error, :local_node_not_distributed} ->
+        {:error,
+         "Cluster disconnect requires a distributed node; start with --sname/--name first"}
+
+      {:error, :cannot_disconnect_current_node} ->
+        {:error, "Cannot disconnect the current node"}
+    end
+  end
+
   def run(["submit-session", session_id, prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
 
@@ -430,6 +464,18 @@ defmodule ClawCode.CLI do
       "#{title} Snapshot",
       "",
       JSON.encode!(snapshot)
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp render_cluster_action(title, result) do
+    [
+      title,
+      "",
+      "node=#{result.node}",
+      "connected=#{result.connected}",
+      "detail=#{result.detail}",
+      "connected_nodes=#{Enum.join(result.connected_nodes, ",")}"
     ]
     |> Enum.join("\n")
   end

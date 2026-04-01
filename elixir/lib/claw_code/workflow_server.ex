@@ -110,6 +110,7 @@ defmodule ClawCode.WorkflowServer do
     %{
       workflow_id: state.workflow_id,
       steps: state.steps,
+      owner_node: ClawCode.Cluster.local_owner_label(),
       persisted_workflow_path: state.persisted_workflow_path
     }
   end

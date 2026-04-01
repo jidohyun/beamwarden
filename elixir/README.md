@@ -56,8 +56,4 @@ mix claw workflow-status smoke-flow
 
 ## Honest limits
 
-- Quorum/failover is still best-effort across the currently connected BEAM subcluster; there is no external consensus store.
-- Session/workflow payloads still recover from JSON snapshots, so daemon durability is stronger for ownership/routing than for payload storage.
-- `cluster-connect` / `cluster-disconnect` still require the current VM to be distributed (`--sname`, `--name`, or `Node.start/2`).
-
-Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`).
+Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

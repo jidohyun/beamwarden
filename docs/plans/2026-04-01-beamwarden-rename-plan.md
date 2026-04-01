@@ -4,6 +4,8 @@ Date: 2026-04-01
 Status: proposed
 Owner: leader synthesis from OMX team review
 
+> Update: the actual OTP app rename to `:beamwarden` has now landed, while the module namespace remains `ClawCode.*`. The remaining major rename step is the module/file namespace migration.
+
 ## Goal
 
 Rename the project from `claw-code` / `Claw Code` to **Beamwarden** while separating:

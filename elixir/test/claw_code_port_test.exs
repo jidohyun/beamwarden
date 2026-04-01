@@ -32,8 +32,9 @@ defmodule ClawCodePortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
-  test "app identity helper keeps the runtime app on claw_code for now" do
-    assert ClawCode.AppIdentity.runtime_app() == :claw_code
+  test "app identity helper keeps beamwarden as the live runtime app" do
+    assert ClawCode.AppIdentity.runtime_app() == :beamwarden
+    assert ClawCode.AppIdentity.legacy_app() == :claw_code
     assert :ok = ClawCode.AppIdentity.ensure_runtime_started()
   end
 

@@ -1,13 +1,12 @@
 defmodule ClawCode.AppIdentity do
   @moduledoc false
 
-  @current_app :claw_code
-  @future_app :beamwarden
+  @runtime_app :beamwarden
+  @legacy_app :claw_code
 
-  def current_app, do: @current_app
-  def future_app, do: @future_app
-  def runtime_app, do: current_app()
-  def known_apps, do: [@future_app, @current_app]
+  def runtime_app, do: @runtime_app
+  def legacy_app, do: @legacy_app
+  def known_apps, do: [@runtime_app, @legacy_app]
   def config_apps, do: known_apps()
 
   def ensure_started do
@@ -15,7 +14,7 @@ defmodule ClawCode.AppIdentity do
   end
 
   def ensure_runtime_started do
-    case Application.ensure_all_started(current_app()) do
+    case Application.ensure_all_started(runtime_app()) do
       {:ok, _apps} -> :ok
       other -> other
     end
@@ -28,7 +27,7 @@ defmodule ClawCode.AppIdentity do
   end
 
   def put_env(key, value) do
-    Application.put_env(current_app(), key, value)
+    Application.put_env(runtime_app(), key, value)
   end
 
   def delete_env(key) do

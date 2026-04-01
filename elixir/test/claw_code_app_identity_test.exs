@@ -3,31 +3,37 @@ defmodule ClawCodeAppIdentityTest do
 
   setup do
     previous_runtime = Application.get_env(ClawCode.AppIdentity.runtime_app(), :daemon_node)
-    previous_future = Application.get_env(ClawCode.AppIdentity.future_app(), :daemon_node)
+    previous_legacy = Application.get_env(ClawCode.AppIdentity.legacy_app(), :daemon_node)
 
     on_exit(fn ->
       restore_env(ClawCode.AppIdentity.runtime_app(), previous_runtime)
-      restore_env(ClawCode.AppIdentity.future_app(), previous_future)
+      restore_env(ClawCode.AppIdentity.legacy_app(), previous_legacy)
     end)
 
     ClawCode.AppIdentity.delete_env(:daemon_node)
     :ok
   end
 
-  test "runtime app remains claw_code during the compatibility phase" do
-    assert ClawCode.AppIdentity.runtime_app() == :claw_code
-    assert :beamwarden in ClawCode.AppIdentity.config_apps()
+  test "runtime app is beamwarden while claw_code remains a legacy fallback" do
+    assert ClawCode.AppIdentity.runtime_app() == :beamwarden
+    assert ClawCode.AppIdentity.legacy_app() == :claw_code
   end
 
-  test "compatibility helper prefers beamwarden config while falling back to runtime app" do
+  test "compatibility helper prefers beamwarden config while falling back to claw_code" do
     assert ClawCode.AppIdentity.get_env(:daemon_node) == nil
 
-    assert :ok = ClawCode.AppIdentity.put_env(:daemon_node, "claw_code_daemon@legacy-host")
+    assert :ok =
+             Application.put_env(
+               ClawCode.AppIdentity.legacy_app(),
+               :daemon_node,
+               "claw_code_daemon@legacy-host"
+             )
+
     assert ClawCode.AppIdentity.get_env(:daemon_node) == "claw_code_daemon@legacy-host"
 
     assert :ok =
              Application.put_env(
-               ClawCode.AppIdentity.future_app(),
+               ClawCode.AppIdentity.runtime_app(),
                :daemon_node,
                "beamwarden_daemon@new-host"
              )

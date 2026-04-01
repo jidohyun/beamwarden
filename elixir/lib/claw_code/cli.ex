@@ -2,45 +2,73 @@ defmodule ClawCode.CLI do
   @moduledoc false
 
   def main(args) do
-    Application.ensure_all_started(:claw_code)
-    {status, output} = run(args)
-    IO.puts(output)
+    case ClawCode.Daemon.preflight(args) do
+      :ok ->
+        :ok
 
-    case status do
-      :ok -> 0
-      :error -> 1
+      {:error, reason} ->
+        return_status({:error, "Failed to prepare daemon mode: #{inspect(reason)}"})
+    end
+
+    Application.ensure_all_started(:claw_code)
+    return_status(run(args))
+  end
+
+  def run(args) do
+    :ok = ClawCode.Daemon.ensure_runtime(args)
+
+    case ClawCode.Daemon.maybe_proxy(args) do
+      {:proxy, result} -> result
+      :local -> run_local(args)
     end
   end
 
-  def run(["summary"]) do
+  def run_local(["summary"]) do
     {:ok, ClawCode.QueryEngine.from_workspace() |> ClawCode.QueryEngine.render_summary()}
   end
 
-  def run(["manifest"]) do
+  def run_local(["manifest"]) do
     {:ok, ClawCode.PortManifest.build() |> ClawCode.PortManifest.to_markdown()}
   end
 
-  def run(["parity-audit"]) do
+  def run_local(["parity-audit"]) do
     {:ok, ClawCode.ParityAudit.run() |> ClawCode.ParityAuditResult.to_markdown()}
   end
 
-  def run(["setup-report"]) do
+  def run_local(["setup-report"]) do
     {:ok, ClawCode.Setup.run() |> ClawCode.SetupReport.as_markdown()}
   end
 
-  def run(["bootstrap-graph"]) do
+  def run_local(["bootstrap-graph"]) do
     {:ok, ClawCode.BootstrapGraph.build() |> ClawCode.BootstrapGraph.as_markdown()}
   end
 
-  def run(["command-graph"]) do
+  def run_local(["command-graph"]) do
     {:ok, ClawCode.CommandGraph.as_markdown()}
   end
 
-  def run(["tool-pool"]) do
+  def run_local(["tool-pool"]) do
     {:ok, ClawCode.ToolPool.as_markdown()}
   end
 
-  def run(["session-start", session_id]) do
+  def run_local(["daemon-status"]) do
+    {:ok, ClawCode.Daemon.status_report()}
+  end
+
+  def run_local(["daemon-run" | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [name: :string, cookie: :string])
+
+    case ClawCode.Daemon.start_server(opts) do
+      {:ok, output} -> {:daemon, output}
+      {:error, reason} -> {:error, "Failed to start daemon mode: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["daemon-stop"]) do
+    ClawCode.Daemon.stop_server()
+  end
+
+  def run_local(["session-start", session_id]) do
     with {:ok, _pid} <- ClawCode.ControlPlane.ensure_session(session_id),
          {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
       {:ok, render_snapshot("Session", snapshot)}
@@ -49,7 +77,7 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["start-session", "--id", session_id, prompt]) do
+  def run_local(["start-session", "--id", session_id, prompt]) do
     with {:ok, _pid} <- ClawCode.ControlPlane.ensure_session(session_id),
          {:ok, _snapshot} <- ClawCode.ControlPlane.submit_prompt(session_id, prompt),
          {:ok, snapshot} <- ClawCode.ControlPlane.session_snapshot(session_id) do
@@ -59,7 +87,7 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["session-submit", session_id, prompt]) do
+  def run_local(["session-submit", session_id, prompt]) do
     with {:ok, snapshot} <- ClawCode.ControlPlane.submit_prompt(session_id, prompt) do
       {:ok, ClawCode.ControlPlane.render_session(snapshot)}
     else
@@ -67,28 +95,23 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["session-status", session_id]) do
+  def run_local(["session-status", session_id]) do
     case ClawCode.ControlPlane.session_snapshot(session_id) do
-      {:ok, session} ->
-        {:ok, ClawCode.ControlPlane.render_session(session)}
-
-      {:error, :not_found} ->
-        {:error, "Session not found: #{session_id}"}
-
-      {:error, reason} ->
-        {:error, "Failed to load session status: #{inspect(reason)}"}
+      {:ok, session} -> {:ok, ClawCode.ControlPlane.render_session(session)}
+      {:error, :not_found} -> {:error, "Session not found: #{session_id}"}
+      {:error, reason} -> {:error, "Failed to load session status: #{inspect(reason)}"}
     end
   end
 
-  def run(["control-plane-status"]) do
+  def run_local(["control-plane-status"]) do
     {:ok, ClawCode.ControlPlane.status_report()}
   end
 
-  def run(["cluster-status"]) do
+  def run_local(["cluster-status"]) do
     {:ok, ClawCode.Cluster.status_report()}
   end
 
-  def run(["cluster-connect", target]) do
+  def run_local(["cluster-connect", target]) do
     case ClawCode.Cluster.connect(target) do
       {:ok, result} ->
         {:ok, render_cluster_action("Cluster Connect", result)}
@@ -101,7 +124,7 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["cluster-disconnect", target]) do
+  def run_local(["cluster-disconnect", target]) do
     case ClawCode.Cluster.disconnect(target) do
       {:ok, result} ->
         {:ok, render_cluster_action("Cluster Disconnect", result)}
@@ -118,7 +141,7 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["submit-session", session_id, prompt | rest]) do
+  def run_local(["submit-session", session_id, prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
 
     case ClawCode.ControlPlane.submit_session(session_id, prompt, limit: opts[:limit] || 5) do
@@ -133,7 +156,8 @@ defmodule ClawCode.CLI do
              "matched_commands=#{Enum.join(response.matched_commands, ", ")}",
              "matched_tools=#{Enum.join(response.matched_tools, ", ")}"
            ],
-           "\n"
+           "
+"
          )}
 
       {:error, :not_found} ->
@@ -144,65 +168,64 @@ defmodule ClawCode.CLI do
     end
   end
 
-  def run(["start-workflow", name | tasks]) do
+  def run_local(["start-workflow", name | tasks]) do
     workflow_tasks =
       if tasks == [],
         do: ClawCode.Tasks.default_tasks(),
         else: ClawCode.Tasks.from_descriptions(tasks)
 
     case ClawCode.ControlPlane.start_workflow(name, workflow_tasks) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, reason} ->
-        {:error, "Failed to start workflow: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
     end
   end
 
-  def run(["workflow-start", workflow_id]) do
+  def run_local(["workflow-start", workflow_id]) do
     case ClawCode.ControlPlane.start_workflow(workflow_id, []) do
       {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
       {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
     end
   end
 
-  def run(["workflow-add-step", workflow_id, title]) do
+  def run_local(["workflow-add-step", workflow_id, title]) do
     case ClawCode.ControlPlane.add_workflow_step(workflow_id, title) do
       {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
       {:error, reason} -> {:error, "Failed to add workflow step: #{inspect(reason)}"}
     end
   end
 
-  def run(["workflow-complete-step", workflow_id, step_id]) do
+  def run_local(["workflow-complete-step", workflow_id, step_id]) do
     case ClawCode.ControlPlane.complete_workflow_step(workflow_id, step_id) do
       {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
       {:error, reason} -> {:error, "Failed to complete workflow step: #{inspect(reason)}"}
     end
   end
 
-  def run(["dialogs"]) do
+  def run_local(["dialogs"]) do
     {:ok, ClawCode.DialogLaunchers.render()}
   end
 
-  def run(["repl-banner"]) do
+  def run_local(["repl-banner"]) do
     {:ok, ClawCode.ReplLauncher.build_banner()}
   end
 
-  def run(["default-tasks"]) do
+  def run_local(["default-tasks"]) do
     {:ok,
      ClawCode.Tasks.default_tasks()
      |> Enum.map(&ClawCode.PortingTask.as_line/1)
-     |> Enum.join("\n")}
+     |> Enum.join("
+")}
   end
 
-  def run(["tool-definitions"]) do
+  def run_local(["tool-definitions"]) do
     {:ok,
      ClawCode.ToolDefinition.default_tools()
      |> ClawCode.ToolDefinition.as_lines()
-     |> Enum.join("\n")}
+     |> Enum.join("
+")}
   end
 
-  def run(["query-route", prompt | rest]) do
+  def run_local(["query-route", prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
     limit = opts[:limit] || 5
     matches = ClawCode.Runtime.route_prompt(prompt, limit)
@@ -216,23 +239,19 @@ defmodule ClawCode.CLI do
        Enum.map(matches, &"- [#{&1.kind}] #{&1.name} (#{&1.score}) — #{&1.source_hint}")
      ]
      |> List.flatten()
-     |> Enum.join("\n")}
+     |> Enum.join("
+")}
   end
 
-  def run(["workflow-status", workflow_id]) do
+  def run_local(["workflow-status", workflow_id]) do
     case ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, :not_found} ->
-        {:error, "Workflow not found: #{workflow_id}"}
-
-      {:error, reason} ->
-        {:error, "Failed to load workflow status: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, :not_found} -> {:error, "Workflow not found: #{workflow_id}"}
+      {:error, reason} -> {:error, "Failed to load workflow status: #{inspect(reason)}"}
     end
   end
 
-  def run(["advance-task", workflow_id, task_id, status | detail_parts]) do
+  def run_local(["advance-task", workflow_id, task_id, status | detail_parts]) do
     detail =
       case Enum.join(detail_parts, " ") do
         "" -> nil
@@ -240,18 +259,13 @@ defmodule ClawCode.CLI do
       end
 
     case ClawCode.ControlPlane.advance_task(workflow_id, task_id, status, detail) do
-      {:ok, workflow} ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-
-      {:error, :not_found} ->
-        {:error, "Workflow not found: #{workflow_id}"}
-
-      {:error, reason} ->
-        {:error, "Failed to advance task: #{inspect(reason)}"}
+      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, :not_found} -> {:error, "Workflow not found: #{workflow_id}"}
+      {:error, reason} -> {:error, "Failed to advance task: #{inspect(reason)}"}
     end
   end
 
-  def run(["commands" | rest]) do
+  def run_local(["commands" | rest]) do
     {opts, _, _} =
       OptionParser.parse(rest,
         strict: [
@@ -280,14 +294,15 @@ defmodule ClawCode.CLI do
         Enum.join(
           ["Command entries: #{length(commands)}", ""] ++
             Enum.map(Enum.take(commands, opts[:limit] || 20), &"- #{&1.name} — #{&1.source_hint}"),
-          "\n"
+          "
+"
         )
       end
 
     {:ok, output}
   end
 
-  def run(["tools" | rest]) do
+  def run_local(["tools" | rest]) do
     {opts, _, _} =
       OptionParser.parse(rest,
         strict: [
@@ -332,14 +347,15 @@ defmodule ClawCode.CLI do
         Enum.join(
           ["Tool entries: #{length(tools)}", ""] ++
             Enum.map(Enum.take(tools, opts[:limit] || 20), &"- #{&1.name} — #{&1.source_hint}"),
-          "\n"
+          "
+"
         )
       end
 
     {:ok, output}
   end
 
-  def run(["route", prompt | rest]) do
+  def run_local(["route", prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
 
     output =
@@ -350,14 +366,15 @@ defmodule ClawCode.CLI do
 
         matches ->
           matches
-          |> Enum.map(&"#{&1.kind}\t#{&1.name}\t#{&1.score}\t#{&1.source_hint}")
-          |> Enum.join("\n")
+          |> Enum.map(&"#{&1.kind}	#{&1.name}	#{&1.score}	#{&1.source_hint}")
+          |> Enum.join("
+")
       end
 
     {:ok, output}
   end
 
-  def run(["bootstrap", prompt | rest]) do
+  def run_local(["bootstrap", prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
 
     {:ok,
@@ -366,7 +383,7 @@ defmodule ClawCode.CLI do
      |> ClawCode.RuntimeSession.as_markdown()}
   end
 
-  def run(["turn-loop", prompt | rest]) do
+  def run_local(["turn-loop", prompt | rest]) do
     {opts, _, _} =
       OptionParser.parse(rest,
         strict: [limit: :integer, max_turns: :integer, structured_output: :boolean]
@@ -381,22 +398,25 @@ defmodule ClawCode.CLI do
       )
       |> Enum.with_index(1)
       |> Enum.map(fn {result, idx} ->
-        Enum.join(["## Turn #{idx}", result.output, "stop_reason=#{result.stop_reason}"], "\n")
+        Enum.join(["## Turn #{idx}", result.output, "stop_reason=#{result.stop_reason}"], "
+")
       end)
-      |> Enum.join("\n")
+      |> Enum.join("
+")
 
     {:ok, output}
   end
 
-  def run(["flush-transcript", prompt]) do
+  def run_local(["flush-transcript", prompt]) do
     {engine, _result} =
       ClawCode.QueryEngine.submit_message(ClawCode.QueryEngine.from_workspace(), prompt)
 
     {engine, path} = ClawCode.QueryEngine.persist_session(engine)
-    {:ok, Enum.join([path, "flushed=#{engine.transcript_store.flushed}"], "\n")}
+    {:ok, Enum.join([path, "flushed=#{engine.transcript_store.flushed}"], "
+")}
   end
 
-  def run(["load-session", session_id]) do
+  def run_local(["load-session", session_id]) do
     session = ClawCode.SessionStore.load_session(session_id)
 
     {:ok,
@@ -406,66 +426,82 @@ defmodule ClawCode.CLI do
          "#{length(session.messages || [])} messages",
          "in=#{session.input_tokens} out=#{session.output_tokens}"
        ],
-       "\n"
+       "
+"
      )}
   end
 
-  def run(["remote-mode", target]) do
+  def run_local(["remote-mode", target]) do
     {:ok, ClawCode.RemoteRuntime.run_remote_mode(target) |> ClawCode.RuntimeModeReport.as_text()}
   end
 
-  def run(["ssh-mode", target]) do
+  def run_local(["ssh-mode", target]) do
     {:ok, ClawCode.RemoteRuntime.run_ssh_mode(target) |> ClawCode.RuntimeModeReport.as_text()}
   end
 
-  def run(["teleport-mode", target]) do
+  def run_local(["teleport-mode", target]) do
     {:ok,
      ClawCode.RemoteRuntime.run_teleport_mode(target) |> ClawCode.RuntimeModeReport.as_text()}
   end
 
-  def run(["direct-connect-mode", target]) do
+  def run_local(["direct-connect-mode", target]) do
     {:ok, ClawCode.DirectModes.run_direct_connect(target) |> ClawCode.DirectModeReport.as_text()}
   end
 
-  def run(["deep-link-mode", target]) do
+  def run_local(["deep-link-mode", target]) do
     {:ok, ClawCode.DirectModes.run_deep_link(target) |> ClawCode.DirectModeReport.as_text()}
   end
 
-  def run(["show-command", name]) do
+  def run_local(["show-command", name]) do
     case ClawCode.Commands.get_command(name) do
       nil -> {:error, "Command not found: #{name}"}
-      module -> {:ok, Enum.join([module.name, module.source_hint, module.responsibility], "\n")}
+      module -> {:ok, Enum.join([module.name, module.source_hint, module.responsibility], "
+")}
     end
   end
 
-  def run(["show-tool", name]) do
+  def run_local(["show-tool", name]) do
     case ClawCode.Tools.get_tool(name) do
       nil -> {:error, "Tool not found: #{name}"}
-      module -> {:ok, Enum.join([module.name, module.source_hint, module.responsibility], "\n")}
+      module -> {:ok, Enum.join([module.name, module.source_hint, module.responsibility], "
+")}
     end
   end
 
-  def run(["exec-command", name, prompt]) do
+  def run_local(["exec-command", name, prompt]) do
     result = ClawCode.Commands.execute_command(name, prompt)
     if result.handled, do: {:ok, result.message}, else: {:error, result.message}
   end
 
-  def run(["exec-tool", name, payload]) do
+  def run_local(["exec-tool", name, payload]) do
     result = ClawCode.Tools.execute_tool(name, payload)
     if result.handled, do: {:ok, result.message}, else: {:error, result.message}
   end
 
-  def run(_args) do
+  def run_local(_args) do
     {:error, "Unknown command"}
   end
 
+  defp return_status({:ok, output}) do
+    IO.puts(output)
+    0
+  end
+
+  defp return_status({:error, output}) do
+    IO.puts(output)
+    1
+  end
+
+  defp return_status({:daemon, output}) do
+    IO.puts(output)
+    ClawCode.Daemon.block_forever()
+    0
+  end
+
   defp render_snapshot(title, snapshot) do
-    [
-      "#{title} Snapshot",
-      "",
-      JSON.encode!(snapshot)
-    ]
-    |> Enum.join("\n")
+    [title <> " Snapshot", "", JSON.encode!(snapshot)]
+    |> Enum.join("
+")
   end
 
   defp render_cluster_action(title, result) do
@@ -477,6 +513,7 @@ defmodule ClawCode.CLI do
       "detail=#{result.detail}",
       "connected_nodes=#{Enum.join(result.connected_nodes, ",")}"
     ]
-    |> Enum.join("\n")
+    |> Enum.join("
+")
   end
 end

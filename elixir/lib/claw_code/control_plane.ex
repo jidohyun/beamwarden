@@ -303,6 +303,7 @@ defmodule ClawCode.ControlPlane do
 
   defp resolve_session_node(session_id) do
     find_running_owner(session_id, :session) ||
+      daemon_preferred_node() ||
       ClawCode.ClusterDaemon.resolve_owner(
         :session,
         session_id,
@@ -312,6 +313,7 @@ defmodule ClawCode.ControlPlane do
 
   defp resolve_workflow_node(workflow_id) do
     find_running_owner(workflow_id, :workflow) ||
+      daemon_preferred_node() ||
       ClawCode.ClusterDaemon.resolve_owner(
         :workflow,
         workflow_id,
@@ -355,6 +357,10 @@ defmodule ClawCode.ControlPlane do
 
   defp call_node(target, function, args) do
     Cluster.rpc_call(target, __MODULE__, function, args)
+  end
+
+  defp daemon_preferred_node do
+    if ClawCode.Daemon.current_server?(), do: node(), else: nil
   end
 
   defp normalize_start({:ok, pid}), do: {:ok, pid}

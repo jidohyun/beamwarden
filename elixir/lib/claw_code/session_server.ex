@@ -48,8 +48,8 @@ defmodule ClawCode.SessionServer do
         path when is_binary(path) ->
           ClawCode.QueryEngine.from_saved_session(session_id)
 
-        true -> ClawCode.QueryEngine.from_saved_session(session_id)
-        false -> %{ClawCode.QueryEngine.from_workspace() | session_id: session_id}
+        nil ->
+          %{ClawCode.QueryEngine.from_workspace() | session_id: session_id}
       end
 
     state = %__MODULE__{
@@ -100,7 +100,7 @@ defmodule ClawCode.SessionServer do
         submits: state.submits + 1
     }
 
-    ClawCode.ClusterDaemon.note_persisted(:session, session_id, path)
+    ClawCode.ClusterDaemon.note_persisted(:session, state.session_id, path)
 
     {:reply, snapshot_map(next_state), next_state}
   end

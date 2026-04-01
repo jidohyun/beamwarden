@@ -122,7 +122,11 @@ defmodule ClawCode.WorkflowServer do
 
   defp persist(%__MODULE__{} = state) do
     path = ClawCode.WorkflowStore.save(snapshot_map(state))
-    safe_cluster_update(fn -> ClawCode.ClusterDaemon.note_persisted(:workflow, state.workflow_id, path) end)
+
+    safe_cluster_update(fn ->
+      ClawCode.ClusterDaemon.note_persisted(:workflow, state.workflow_id, path)
+    end)
+
     %{state | persisted_workflow_path: path}
   end
 

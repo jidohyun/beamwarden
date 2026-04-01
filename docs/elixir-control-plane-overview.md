@@ -1,46 +1,52 @@
 # Elixir Control-Plane Overview
 
-`elixir/` is now the primary workspace for this repository.
+`elixir/` is the primary workspace for this repository.
 
-The Elixir port still follows the project's clean-room structural-mirror philosophy, but it now adds an OTP-native control plane that is better aligned with what Elixir is good at: supervision, resumability, and workflow/task coordination.
-
-It also owns the mirrored snapshot/reference data it executes against under `elixir/priv/reference_data`, so the Python and Rust trees are reference-only companions rather than active dependencies of the Mix workspace.
+The port still follows the project's clean-room structural-mirror philosophy, but it now adds a **daemon-first OTP control plane** aligned with BEAM strengths: supervision, resumability, workflow orchestration, and long-running distributed service processes.
 
 ## What was added
 
-- `ClawCode.SessionServer` — supervised, resumable session processes backed by the existing query engine and session store.
-- `ClawCode.WorkflowServer` — supervised workflow/task state with persisted task transitions.
-- `ClawCode.ControlPlane` — public facade for starting, resuming, inspecting, and advancing sessions/workflows.
-- `ClawCode.Application` — registries + dynamic supervisors for sessions and workflows.
-- Companion mirror helpers for the remaining lightweight Python concepts (`query`, `task`, cost hooks, dialogs, onboarding, REPL banner, and tool definitions).
+- `ClawCode.SessionServer` — supervised, resumable session workers.
+- `ClawCode.WorkflowServer` — supervised workflow/task state with persisted transitions.
+- `ClawCode.ControlPlane` — the public API for session/workflow lifecycle calls.
+- `ClawCode.ClusterDaemon` — DETS-backed ownership ledger for multi-node routing/failover.
+- `ClawCode.DaemonSupervisor` — long-running root supervision boundary for cluster lifecycle services.
+- `ClawCode.DaemonNodeMonitor` — nodeup/nodedown monitoring plus reconciliation nudges.
+- `ClawCode.Daemon` — daemon-mode bootstrapping, status, stop, and CLI proxy support.
 
 ## Current cluster/daemon posture
 
-The control plane already supports distributed routing across connected BEAM nodes, but it should still be described as:
+Shipped today:
 
-- **shipped today:** resumable OTP workers plus multi-node routing
-- **not shipped yet:** quorum-backed ownership, daemon-first cluster continuity, and a dedicated cluster-coordinator supervision layer
+- resumable OTP workers plus multi-node routing
+- supervised daemon-first control-plane mode for connected BEAM nodes
+- daemon-aware CLI proxying to a configured long-running node
+- durable ownership metadata in the cluster ledger (`.port_sessions/cluster/<node>/ledger.dets`)
 
-See `docs/elixir-cluster-daemon-review.md` for the code-quality review and the recommended hardening sequence.
+Not shipped yet:
 
-## CLI surface
+- external consensus or split-brain-safe quorum
+- payload durability beyond JSON snapshots
+- production-grade cluster discovery beyond connected BEAM nodes
 
-Representative commands:
+See `docs/elixir-cluster-daemon-review.md` for the current review note and limits.
+
+## Representative CLI surface
 
 ```bash
 cd elixir
+mix claw daemon-status
 mix claw control-plane-status
+mix claw cluster-status
 mix claw start-session --id smoke-session "review MCP tool"
 mix claw submit-session smoke-session "review MCP tool"
 mix claw session-status smoke-session
 mix claw start-workflow smoke-flow "Update README" "Update docs"
-mix claw workflow-status <workflow-id>
-mix claw advance-task <workflow-id> task-1 completed "done"
+mix claw workflow-status smoke-flow
+mix claw advance-task smoke-flow 1 completed "done"
 ```
 
 ## Verification
-
-The current smoke/verification contract for the Elixir workspace is:
 
 ```bash
 cd elixir
@@ -48,5 +54,3 @@ mix format --check-formatted
 mix compile
 mix test
 ```
-
-Representative `mix claw` smoke checks should cover both the structural mirror and the control plane.

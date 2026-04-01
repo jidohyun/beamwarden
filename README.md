@@ -160,12 +160,13 @@ mix claw summary
 mix claw manifest
 mix claw setup-report
 mix claw bootstrap "review MCP tool"
+mix claw daemon-status
 mix claw control-plane-status
 mix claw start-session --id smoke-session "review MCP tool"
 mix claw submit-session smoke-session "review MCP tool"
 ```
 
-For a short architectural note on the new OTP supervision layer, see `docs/elixir-control-plane-overview.md`.
+For a short architectural note on the daemon-first OTP supervision layer, see `docs/elixir-control-plane-overview.md`.
 
 Inspect mirrored command/tool inventories:
 

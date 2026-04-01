@@ -22,11 +22,8 @@ defmodule ClawCode.Cluster do
   def quorum_size(_count), do: 1
 
   def with_claim_lock(scope, identifier, fun) when is_function(fun, 0) do
-    if Node.alive?() do
-      :global.trans({__MODULE__, scope, identifier}, fun, member_nodes())
-    else
-      fun.()
-    end
+    _ = {scope, identifier}
+    fun.()
   end
 
   def reachable_node?(target) when is_binary(target),
@@ -40,7 +37,10 @@ defmodule ClawCode.Cluster do
   def parse_owner_node(""), do: nil
   def parse_owner_node("local"), do: nil
   def parse_owner_node(target) when is_atom(target), do: target
-  def parse_owner_node(target) when is_binary(target), do: String.to_atom(target)
+
+  def parse_owner_node(target) when is_binary(target) do
+    Enum.find(known_nodes(), fn candidate -> Atom.to_string(candidate) == target end)
+  end
 
   def connect(target) do
     normalized = normalize_node(target)
@@ -100,6 +100,14 @@ defmodule ClawCode.Cluster do
   def status do
     members = member_nodes()
     daemon = ClawCode.ClusterDaemon.local_stats()
+    configured_daemon_node = ClawCode.Daemon.configured_node_label() || "none"
+
+    daemon_role =
+      cond do
+        ClawCode.Daemon.current_server?() -> "server"
+        daemon_connected_to_current?() -> "client"
+        true -> "standalone"
+      end
 
     %{
       distributed?: distributed?(),
@@ -109,9 +117,12 @@ defmodule ClawCode.Cluster do
       cluster_size: length(members),
       quorum_size: quorum_size(length(members)),
       daemon_mode: "supervised DETS-backed ownership ledger",
+      daemon_role: daemon_role,
+      configured_daemon_node: configured_daemon_node,
       daemon_ledger_path: daemon.ledger_path,
       daemon_records: daemon.records,
-      routing_strategy: "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
+      routing_strategy:
+        "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
     }
   end
 
@@ -128,6 +139,8 @@ defmodule ClawCode.Cluster do
       "connected_nodes=#{length(status.connected_nodes)}",
       "members=#{Enum.map_join(status.members, ",", &Atom.to_string/1)}",
       "daemon_mode=#{status.daemon_mode}",
+      "daemon_role=#{status.daemon_role}",
+      "configured_daemon_node=#{status.configured_daemon_node}",
       "daemon_records=#{status.daemon_records}",
       "daemon_ledger_path=#{status.daemon_ledger_path}",
       "routing_strategy=#{status.routing_strategy}",
@@ -140,6 +153,20 @@ defmodule ClawCode.Cluster do
       )
     ]
     |> Enum.join("\n")
+  end
+
+  defp daemon_connected_to_current? do
+    case ClawCode.Daemon.configured_node() do
+      nil -> false
+      daemon when daemon == node() -> true
+      daemon -> Node.alive?() and daemon in Node.list()
+    end
+  end
+
+  defp known_nodes do
+    [ClawCode.Daemon.configured_node() | member_nodes()]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
   end
 
   defp normalize_node(target) when is_atom(target), do: target

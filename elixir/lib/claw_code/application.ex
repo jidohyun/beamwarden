@@ -5,8 +5,7 @@ defmodule ClawCode.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {ClawCode.ClusterSupervisor, []},
-      {ClawCode.ControlPlaneSupervisor, []}
+      {ClawCode.DaemonSupervisor, []}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: ClawCode.Supervisor)

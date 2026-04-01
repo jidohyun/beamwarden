@@ -124,7 +124,7 @@ defmodule ClawCodeClusterDaemonTest do
     File.rm(ClawCode.session_path(session_id))
   end
 
-  defp wait_until(fun, attempts \ 50)
+  defp wait_until(fun, attempts \\ 50)
   defp wait_until(_fun, attempts) when attempts <= 0, do: flunk("condition did not become true")
 
   defp wait_until(fun, attempts) do

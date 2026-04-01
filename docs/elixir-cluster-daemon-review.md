@@ -1,118 +1,50 @@
 # Elixir Cluster Daemon Review
 
-This review documents the current Elixir multi-node control plane as of April 1, 2026 and maps the remaining work needed to turn it into a more durable cluster daemon without adding non-OTP dependencies.
+This note reflects the repository state after the daemon-oriented hardening pass on April 1, 2026.
 
-## Current baseline
+## What is shipped now
 
-The current control plane is already useful, but it is still **session/workflow supervision inside an otherwise short-lived CLI VM**, not a durable daemon:
+The Elixir control plane is no longer only an ephemeral CLI wrapper around local supervisors.
 
-- `ClawCode.Application` starts local registries plus dynamic supervisors only (`elixir/lib/claw_code/application.ex:6-14`).
-- Session/workflow ownership is resolved with the runtime owner first, then a persisted owner string from JSON, then a `:erlang.phash2/2` fallback (`elixir/lib/claw_code/control_plane.ex:6-119`, `elixir/lib/claw_code/cluster.ex:12-19`).
-- Durable state is still JSON-backed for both sessions and workflows (`elixir/lib/claw_code/session_store.ex:11-25`, `elixir/lib/claw_code/workflow_store.ex:4-17`).
-- Session/workflow workers are `restart: :transient`, which is appropriate for the current CLI-shaped lifecycle but not sufficient for a long-running daemon story (`elixir/lib/claw_code/session_server.ex:15-20`, `elixir/lib/claw_code/workflow_server.ex:8-13`).
+It now ships:
 
-That means the current implementation is best described as **distributed routing plus resumable local workers**, not yet quorum-backed cluster process management.
+- a dedicated `ClawCode.DaemonSupervisor` root boundary
+- a supervised `ClawCode.ClusterDaemon` ownership ledger backed by DETS
+- `ClawCode.DaemonNodeMonitor` reconciliation on node membership changes
+- daemon-aware CLI proxying through `CLAW_DAEMON_NODE` / configured daemon mode
+- daemon-first routing for new session/workflow work handled on the configured server node
+- distributed ExUnit coverage proving that one client can create session state through the daemon and another client can inspect the same state without depending on the first client process surviving
 
-## Review by strengthening slice
+## What improved in the three hardening slices
 
-### 1. Quorum and ownership failover hardening
+### 1. Ownership / failover hardening
 
-**What exists now**
+- Ownership is now tracked in the cluster ledger, not only in the snapshot JSON.
+- The ledger stores epoch/lease-style metadata and is consulted before falling back to persisted owner strings.
+- Running owners still win first, which keeps live routing stable.
 
-- Ownership metadata is a single `owner_node` string in the persisted snapshot (`elixir/lib/claw_code/session_store.ex:15-21`, `elixir/lib/claw_code/workflow_store.ex:4-8`).
-- Failover is effectively “if the running owner is gone, try the persisted owner, then hash across connected members” (`elixir/lib/claw_code/cluster.ex:89-99` and the README routing summary).
+### 2. Durable daemon mode beyond shared JSON
 
-**Why that is not durable enough yet**
+- Active routing continuity can now go through a long-running daemon node instead of depending on every CLI invocation spinning up its own isolated control plane.
+- Ownership metadata survives daemon restarts through the DETS-backed ledger.
+- Client nodes can proxy CLI control-plane calls to the configured daemon node.
 
-- There is no term/epoch, lease, fencing token, or quorum acknowledgement attached to ownership.
-- Two nodes that can both see the same JSON snapshot can both decide they should resume it.
-- `list_sessions/0` and `list_workflows/0` merge per-node answers for reporting, but that is observation, not conflict prevention (`elixir/lib/claw_code/control_plane.ex:121-140`).
+### 3. Stronger long-running supervision tree
 
-**Recommended next hardening step**
+- `ClawCode.Application` now boots a dedicated daemon/root supervisor.
+- Cluster services and control-plane services are supervised under explicit daemon-oriented boundaries instead of living as a flat one-off CLI tree.
+- Node monitoring and reconciliation are now first-class services.
 
-Stay inside built-in OTP/BEAM primitives:
+## Honest limits that remain
 
-1. introduce an ownership record with `owner_node`, `owner_term`, `observed_at`, and `origin`;
-2. gate adoption behind an explicit cluster-wide claim/ack round (`:rpc.multicall/4` or `:global.trans/4`);
-3. only allow takeover when the previous owner is unreachable and no higher/equal term claim is present.
+The implementation is materially stronger, but it is still intentionally conservative:
 
-**Honest limit**
+- quorum/failover is still **best-effort across connected BEAM nodes**; there is no external consensus system
+- session/workflow payload durability still relies on JSON snapshots
+- cluster discovery is still limited to BEAM nodes that can already connect to each other
+- `cluster-connect` / `cluster-disconnect` still require a distributed VM
 
-Without a consensus system or an external durable log, this can become *safer* but not fully partition-proof. Docs should keep calling it best-effort across connected BEAM nodes.
-
-### 2. Durable cluster daemon mode without relying only on shared JSON
-
-**What exists now**
-
-- Active continuity still depends on restarting from snapshot files.
-- Session/workflow discovery uses local registries plus RPC fan-out, which works only while participating nodes are already running (`elixir/lib/claw_code/control_plane.ex:121-140`, `elixir/lib/claw_code/control_plane.ex:224-245`).
-
-**Why that is not durable enough yet**
-
-- Shared JSON is the durable handoff layer today; there is no long-running cluster coordinator process that outlives one `mix claw ...` invocation.
-- The cluster status output already documents this limitation explicitly (`elixir/lib/claw_code/cluster.ex:102-123`).
-
-**Recommended next hardening step**
-
-Build a daemon mode where:
-
-1. a long-running named BEAM node hosts a cluster coordinator process;
-2. registries/supervisors become the primary live state;
-3. JSON snapshots remain recovery artifacts, not the primary cross-node coordination path;
-4. CLI commands talk to the daemon node instead of spinning up isolated control-plane state for every invocation.
-
-**Honest limit**
-
-If the daemon is not running, the system should fall back to the current single-node CLI behavior rather than pretend cluster continuity still exists.
-
-### 3. Stronger long-running daemon supervision tree
-
-**What exists now**
-
-- The root supervisor is flat and intentionally small: session registry/supervisor plus workflow registry/supervisor only (`elixir/lib/claw_code/application.ex:6-14`).
-- Session and workflow workers are individually restartable, but there is no dedicated cluster coordinator, node monitor, adoption service, or daemon-facing command bridge.
-
-**Why that is not durable enough yet**
-
-- There is no supervision boundary dedicated to cluster lifecycle.
-- Worker restart semantics are tuned for ephemeral CLI execution, not for persistent daemon service ownership.
-
-**Recommended next hardening step**
-
-Move toward a tree shaped more like:
-
-1. `ClawCode.DaemonSupervisor`
-2. `ClawCode.ClusterSupervisor`
-3. node monitor / ownership coordinator / adoption service
-4. session + workflow supervisors under that cluster layer
-
-This keeps today’s single-node workers intact while making cluster lifecycle explicit and reviewable.
-
-## Code-quality summary
-
-The current design is coherent and conservative:
-
-- it preserves single-node behavior;
-- it uses only OTP/BEAM built-ins;
-- it keeps the current routing rules easy to understand;
-- it already documents some limitations honestly.
-
-The main quality risk is **overstating durability**. The code is not pretending to solve consensus, but the docs needed a clearer distinction between:
-
-- resumable supervision,
-- distributed routing,
-- durable daemon behavior.
-
-## Documentation stance to keep
-
-Use this phrasing consistently:
-
-- **Shipped today:** resumable OTP sessions/workflows with distributed routing across connected nodes.
-- **Not shipped yet:** quorum-backed ownership, daemon-first coordination, partition-safe failover, and cluster continuity without an already-running distributed node.
-
-## Verification note
-
-This review is documentation-only. The repository verification contract remains:
+## Verification contract
 
 ```bash
 cd elixir

@@ -88,7 +88,9 @@ defmodule ClawCode.ClusterDaemon do
         table -> table
       end
 
-    {:ok, dets} = :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
+    {:ok, dets} =
+      :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
+
     load_dets_into_ets(dets, table)
 
     {:ok, %{table: table, dets: dets, ledger_path: ClawCode.cluster_ledger_path()}}
@@ -137,11 +139,13 @@ defmodule ClawCode.ClusterDaemon do
           nil
 
         existing ->
-          existing
-          |> Map.put(:running, false)
-          |> Map.put(:lease_expires_at, now_ms())
-          |> Map.put(:updated_at, now_ms())
-          |> maybe_store_record(state)
+          maybe_store_record(
+            state,
+            existing
+            |> Map.put(:running, false)
+            |> Map.put(:lease_expires_at, now_ms())
+            |> Map.put(:updated_at, now_ms())
+          )
       end
 
     {:reply, updated, state}
@@ -163,7 +167,7 @@ defmodule ClawCode.ClusterDaemon do
     now = now_ms()
 
     desired =
-      runtime_records(:session) ++ runtime_records(:workflow)
+      runtime_records(:session, state) ++ runtime_records(:workflow, state)
 
     desired_keys =
       desired
@@ -244,12 +248,12 @@ defmodule ClawCode.ClusterDaemon do
 
   defp quorum_met?(view), do: view.acknowledgements >= view.quorum_size
 
-  defp runtime_records(scope) do
+  defp runtime_records(scope, state) do
     owner_node = Cluster.local_owner_label()
 
     local_running_ids(scope)
     |> Enum.map(fn identifier ->
-      existing = local_record(scope, identifier)
+      existing = lookup_record(state.table, scope, identifier)
       now = now_ms()
 
       %{

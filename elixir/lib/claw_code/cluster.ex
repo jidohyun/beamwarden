@@ -22,11 +22,8 @@ defmodule ClawCode.Cluster do
   def quorum_size(_count), do: 1
 
   def with_claim_lock(scope, identifier, fun) when is_function(fun, 0) do
-    if Node.alive?() do
-      :global.trans({__MODULE__, scope, identifier}, fun, member_nodes())
-    else
-      fun.()
-    end
+    _ = {scope, identifier}
+    fun.()
   end
 
   def reachable_node?(target) when is_binary(target),
@@ -111,7 +108,8 @@ defmodule ClawCode.Cluster do
       daemon_mode: "supervised DETS-backed ownership ledger",
       daemon_ledger_path: daemon.ledger_path,
       daemon_records: daemon.records,
-      routing_strategy: "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
+      routing_strategy:
+        "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
     }
   end
 

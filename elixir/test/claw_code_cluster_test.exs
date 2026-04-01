@@ -97,8 +97,8 @@ defmodule ClawCodeClusterTest do
   end
 
   defp ensure_peer_started(peer_node) do
-    case :rpc.call(peer_node, :application, :ensure_all_started, [:claw_code]) do
-      {:ok, _apps} -> :ok
+    case :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, []) do
+      :ok -> :ok
       {:badrpc, reason} -> raise "failed to start claw_code on #{peer_node}: #{inspect(reason)}"
       other -> raise "unexpected peer start result: #{inspect(other)}"
     end

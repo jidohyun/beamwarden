@@ -61,7 +61,7 @@ defmodule ClawCode.Daemon do
 
   def start_server(opts \\ []) do
     with :ok <- ensure_server_distribution(opts) do
-      Application.put_env(:claw_code, :daemon_node, Atom.to_string(node()))
+      ClawCode.AppIdentity.put_env(:daemon_node, Atom.to_string(node()))
       maybe_put_cookie(opts[:cookie])
       ClawCode.ClusterDaemon.reconcile_local_runtime()
       {:ok, status_report()}
@@ -164,12 +164,12 @@ defmodule ClawCode.Daemon do
   end
 
   def configured_node_label do
-    Application.get_env(:claw_code, :daemon_node) ||
+    ClawCode.AppIdentity.get_env(:daemon_node) ||
       preferred_env("BEAMWARDEN_DAEMON_NODE", "CLAW_DAEMON_NODE")
   end
 
   def daemon_cookie do
-    Application.get_env(:claw_code, :daemon_cookie) ||
+    ClawCode.AppIdentity.get_env(:daemon_cookie) ||
       preferred_env("BEAMWARDEN_DAEMON_COOKIE", "CLAW_DAEMON_COOKIE")
   end
 

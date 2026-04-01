@@ -9,8 +9,8 @@ defmodule ClawCodeDaemonFailoverTest do
   test "configured but unreachable daemon falls back to local session execution" do
     session_id = unique_id("daemon-fallback")
     unreachable_daemon = "ghost@#{host_name()}"
-    original_daemon_node = Application.get_env(:claw_code, :daemon_node)
-    original_cookie = Application.get_env(:claw_code, :daemon_cookie)
+    original_daemon_node = ClawCode.AppIdentity.get_env(:daemon_node)
+    original_cookie = ClawCode.AppIdentity.get_env(:daemon_cookie)
 
     on_exit(fn ->
       restore_env(:daemon_node, original_daemon_node)
@@ -18,14 +18,10 @@ defmodule ClawCodeDaemonFailoverTest do
       cleanup_local_session(session_id)
     end)
 
-    assert :ok = Application.put_env(:claw_code, :daemon_node, unreachable_daemon)
+    assert :ok = ClawCode.AppIdentity.put_env(:daemon_node, unreachable_daemon)
 
     assert :ok =
-             Application.put_env(
-               :claw_code,
-               :daemon_cookie,
-               Atom.to_string(Node.get_cookie())
-             )
+             ClawCode.AppIdentity.put_env(:daemon_cookie, Atom.to_string(Node.get_cookie()))
 
     assert {:ok, status_output} = ClawCode.CLI.run(["daemon-status"])
     assert status_output =~ "role=standalone"
@@ -61,8 +57,8 @@ defmodule ClawCodeDaemonFailoverTest do
     File.rm(ClawCode.session_path(session_id))
   end
 
-  defp restore_env(key, nil), do: Application.delete_env(:claw_code, key)
-  defp restore_env(key, value), do: Application.put_env(:claw_code, key, value)
+  defp restore_env(key, nil), do: ClawCode.AppIdentity.delete_env(key)
+  defp restore_env(key, value), do: ClawCode.AppIdentity.put_env(key, value)
 
   defp unique_id(prefix) do
     suffix = Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)

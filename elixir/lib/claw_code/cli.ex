@@ -10,7 +10,7 @@ defmodule ClawCode.CLI do
         return_status({:error, "Failed to prepare daemon mode: #{inspect(reason)}"})
     end
 
-    Application.ensure_all_started(:claw_code)
+    ClawCode.AppIdentity.ensure_started()
     return_status(run(args))
   end
 

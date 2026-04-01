@@ -32,6 +32,11 @@ defmodule ClawCodePortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
+  test "app identity helper keeps the runtime app on claw_code for now" do
+    assert ClawCode.AppIdentity.runtime_app() == :claw_code
+    assert :ok = ClawCode.AppIdentity.ensure_runtime_started()
+  end
+
   test "parity audit runs" do
     output = capture_io(fn -> assert 0 == ClawCode.CLI.main(["parity-audit"]) end)
     assert output =~ "Parity Audit"

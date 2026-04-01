@@ -153,7 +153,7 @@ defmodule ClawCodeClusterDurabilityTest do
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
     assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
-    assert {:ok, _apps} = :rpc.call(peer_node, Application, :ensure_all_started, [:claw_code])
+    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
 
     %{peer: peer, node: peer_node}
   end

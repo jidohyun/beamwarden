@@ -237,6 +237,12 @@ Recommended conservative approach:
 4. update peer-node boot/test code to start the new app
 5. audit docs, scripts, and tests for app-name assumptions
 
+### Groundwork already safe to land before the actual app rename
+- centralize app startup/env access behind a helper (currently `ClawCode.AppIdentity`)
+- keep the real runtime app on `:claw_code` until a dedicated breaking phase
+- let config reads prefer `:beamwarden` and fall back to `:claw_code` during the migration window
+- move peer-node tests to the helper first so the later app rename becomes mostly a one-module change
+
 ### Compatibility breakpoints
 - `Application.ensure_all_started(:claw_code)` callers
 - app env reads/writes in runtime and tests

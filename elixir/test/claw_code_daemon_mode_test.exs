@@ -129,20 +129,15 @@ defmodule ClawCodeDaemonModeTest do
 
     assert :ok = :rpc.call(peer_node, :code, :add_paths, [:code.get_path()])
     assert {:ok, _apps} = :rpc.call(peer_node, :application, :ensure_all_started, [:elixir])
-    assert {:ok, _apps} = :rpc.call(peer_node, Application, :ensure_all_started, [:claw_code])
+    assert :ok = :rpc.call(peer_node, ClawCode.AppIdentity, :ensure_started, [])
     %{peer: peer, node: peer_node}
   end
 
   defp configure_daemon!(target_node, daemon_label, cookie) do
     assert :ok =
-             :rpc.call(target_node, Application, :put_env, [
-               :claw_code,
-               :daemon_node,
-               daemon_label
-             ])
+             :rpc.call(target_node, ClawCode.AppIdentity, :put_env, [:daemon_node, daemon_label])
 
-    assert :ok =
-             :rpc.call(target_node, Application, :put_env, [:claw_code, :daemon_cookie, cookie])
+    assert :ok = :rpc.call(target_node, ClawCode.AppIdentity, :put_env, [:daemon_cookie, cookie])
   end
 
   defp cleanup_remote_session(target_node, session_id) do

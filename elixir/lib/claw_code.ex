@@ -41,6 +41,25 @@ defmodule ClawCode do
     Path.join(session_root(), "workflows")
   end
 
+  def cluster_root do
+    Path.join(session_root(), "cluster")
+  end
+
+  def cluster_node_root do
+    node_label =
+      if Node.alive?(), do: Atom.to_string(node()), else: "local"
+
+    sanitized =
+      node_label
+      |> String.replace(~r/[^a-zA-Z0-9._-]/u, "_")
+
+    Path.join(cluster_root(), sanitized)
+  end
+
+  def cluster_ledger_path do
+    Path.join(cluster_node_root(), "ledger.dets")
+  end
+
   def session_path(session_id) do
     Path.join(session_root(), "#{session_id}.json")
   end

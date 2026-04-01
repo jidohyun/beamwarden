@@ -38,14 +38,30 @@ defmodule ClawCode.SessionServer do
 
   @impl true
   def init(session_id) do
+    persisted_path =
+      if File.exists?(ClawCode.session_path(session_id)),
+        do: ClawCode.session_path(session_id),
+        else: nil
+
     engine =
-      case File.exists?(ClawCode.session_path(session_id)) do
+      case persisted_path do
+        path when is_binary(path) ->
+          ClawCode.QueryEngine.from_saved_session(session_id)
+
         true -> ClawCode.QueryEngine.from_saved_session(session_id)
         false -> %{ClawCode.QueryEngine.from_workspace() | session_id: session_id}
       end
 
-    {:ok,
-     %__MODULE__{session_id: session_id, engine: engine, submits: length(engine.mutable_messages)}}
+    state = %__MODULE__{
+      session_id: session_id,
+      engine: engine,
+      persisted_session_path: persisted_path,
+      submits: length(engine.mutable_messages)
+    }
+
+    ClawCode.ClusterDaemon.claim_local_owner(:session, session_id, persisted_path: persisted_path)
+
+    {:ok, state}
   end
 
   @impl true
@@ -84,12 +100,20 @@ defmodule ClawCode.SessionServer do
         submits: state.submits + 1
     }
 
+    ClawCode.ClusterDaemon.note_persisted(:session, session_id, path)
+
     {:reply, snapshot_map(next_state), next_state}
   end
 
   @impl true
   def handle_call(:snapshot, _from, %__MODULE__{} = state) do
     {:reply, snapshot_map(state), state}
+  end
+
+  @impl true
+  def terminate(_reason, %__MODULE__{session_id: session_id}) do
+    safe_cluster_update(fn -> ClawCode.ClusterDaemon.mark_stopped(:session, session_id) end)
+    :ok
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
@@ -109,4 +133,10 @@ defmodule ClawCode.SessionServer do
   end
 
   defp via(session_id), do: {:via, Registry, {ClawCode.SessionRegistry, session_id}}
+
+  defp safe_cluster_update(fun) do
+    fun.()
+  catch
+    :exit, _reason -> :ok
+  end
 end

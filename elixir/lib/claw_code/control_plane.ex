@@ -14,6 +14,7 @@ defmodule ClawCode.ControlPlane do
   def ensure_local_session(session_id) do
     case Registry.lookup(ClawCode.SessionRegistry, session_id) do
       [{pid, _value}] ->
+        ClawCode.ClusterDaemon.claim_local_owner(:session, session_id)
         {:ok, pid}
 
       [] ->
@@ -65,6 +66,7 @@ defmodule ClawCode.ControlPlane do
   def ensure_local_workflow(workflow_id) do
     case Registry.lookup(ClawCode.WorkflowRegistry, workflow_id) do
       [{pid, _value}] ->
+        ClawCode.ClusterDaemon.claim_local_owner(:workflow, workflow_id)
         {:ok, pid}
 
       [] ->
@@ -301,14 +303,20 @@ defmodule ClawCode.ControlPlane do
 
   defp resolve_session_node(session_id) do
     find_running_owner(session_id, :session) ||
-      stored_owner_node(ClawCode.SessionStore.owner_node(session_id)) ||
-      Cluster.owner_node(:session, session_id)
+      ClawCode.ClusterDaemon.resolve_owner(
+        :session,
+        session_id,
+        stored_owner_node(ClawCode.SessionStore.owner_node(session_id))
+      )
   end
 
   defp resolve_workflow_node(workflow_id) do
     find_running_owner(workflow_id, :workflow) ||
-      stored_owner_node(ClawCode.WorkflowStore.owner_node(workflow_id)) ||
-      Cluster.owner_node(:workflow, workflow_id)
+      ClawCode.ClusterDaemon.resolve_owner(
+        :workflow,
+        workflow_id,
+        stored_owner_node(ClawCode.WorkflowStore.owner_node(workflow_id))
+      )
   end
 
   defp find_running_owner(identifier, :session) do

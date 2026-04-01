@@ -18,6 +18,17 @@ defmodule ClawCode.Cluster do
     if Node.alive?(), do: Enum.sort([node() | Node.list()]), else: [node()]
   end
 
+  def quorum_size(count) when is_integer(count) and count > 0, do: div(count, 2) + 1
+  def quorum_size(_count), do: 1
+
+  def with_claim_lock(scope, identifier, fun) when is_function(fun, 0) do
+    if Node.alive?() do
+      :global.trans({__MODULE__, scope, identifier}, fun, member_nodes())
+    else
+      fun.()
+    end
+  end
+
   def reachable_node?(target) when is_binary(target),
     do: target |> parse_owner_node() |> reachable_node?()
 
@@ -88,6 +99,7 @@ defmodule ClawCode.Cluster do
 
   def status do
     members = member_nodes()
+    daemon = ClawCode.ClusterDaemon.local_stats()
 
     %{
       distributed?: distributed?(),
@@ -95,7 +107,11 @@ defmodule ClawCode.Cluster do
       connected_nodes: Enum.sort(Node.list()),
       members: members,
       cluster_size: length(members),
-      routing_strategy: "running owner -> persisted owner -> phash2 fallback"
+      quorum_size: quorum_size(length(members)),
+      daemon_mode: "supervised DETS-backed ownership ledger",
+      daemon_ledger_path: daemon.ledger_path,
+      daemon_records: daemon.records,
+      routing_strategy: "running owner -> daemon quorum ledger -> persisted owner -> phash2 fallback"
     }
   end
 
@@ -108,13 +124,17 @@ defmodule ClawCode.Cluster do
       "distributed=#{status.distributed?}",
       "local_node=#{status.local_node}",
       "cluster_size=#{status.cluster_size}",
+      "quorum_size=#{status.quorum_size}",
       "connected_nodes=#{length(status.connected_nodes)}",
       "members=#{Enum.map_join(status.members, ",", &Atom.to_string/1)}",
+      "daemon_mode=#{status.daemon_mode}",
+      "daemon_records=#{status.daemon_records}",
+      "daemon_ledger_path=#{status.daemon_ledger_path}",
       "routing_strategy=#{status.routing_strategy}",
       if(
         status.distributed?,
         do:
-          "limit=ephemeral CLI invocations do not keep a BEAM cluster alive after the command exits",
+          "limit=quorum is evaluated across the currently connected BEAM subcluster, not an external consensus system",
         else:
           "limit=start the VM with --sname/--name (or Node.start/2) before using cluster-connect/disconnect"
       )

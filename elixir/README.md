@@ -43,7 +43,7 @@ This workspace follows the same conservative porting approach as the Python tree
 
 - it keeps its own copied reference snapshots under `priv/reference_data/`
 - it mirrors structure and control flow
-- it adds Mix/OTP-native supervision for sessions and workflows
+- it adds Mix/OTP-native supervision for sessions, workflows, and a durable cluster daemon subtree
 - it can route session/workflow operations across connected BEAM nodes without extra dependencies
 - it does **not** claim full Claude Code runtime parity
 
@@ -52,16 +52,19 @@ This workspace follows the same conservative porting approach as the Python tree
 The Elixir control plane now routes sessions and workflows with this priority:
 
 1. currently running owner node
-2. persisted owner node recorded in the JSON snapshot
-3. a `:erlang.phash2/2` fallback across the currently connected cluster members
+2. the supervised cluster daemon's replicated ownership ledger (quorum gated across the connected BEAM subcluster)
+3. persisted owner node recorded in the JSON snapshot
+4. a `:erlang.phash2/2` fallback across the currently connected cluster members
+
+The daemon persists its ledger to a per-node DETS file under `.port_sessions/cluster/<node>/ledger.dets` and fan-outs ownership updates over BEAM RPC, so cross-node routing does not rely only on shared JSON snapshots.
 
 This keeps single-node behavior unchanged while allowing local multi-node tests and distributed embeddings to coordinate through the same APIs.
 
 Honest limits:
 
-- `mix claw ...` is still an ephemeral CLI entrypoint; it does **not** leave behind a daemonized cluster after the command exits.
+- `mix claw ...` is still an ephemeral CLI entrypoint; it does **not** keep an always-on cluster alive after the command exits unless you run the VM itself as a long-lived node.
 - `cluster-connect` / `cluster-disconnect` only work when the current VM is already distributed (`--sname`, `--name`, or `Node.start/2`).
-- Ownership failover is best-effort. If the previous owner node is unavailable, another connected node can adopt the persisted snapshot, but there is no quorum or conflict-resolution layer.
-- Persisted snapshots assume shared filesystem visibility when you expect multiple nodes to resume the same session/workflow JSON.
+- Quorum is based on the currently connected BEAM subcluster only; there is still no external consensus store or split-brain resolution beyond what the connected nodes can observe.
+- Session/workflow contents still resume from JSON snapshots, so durable routing metadata is stronger than durable payload storage when nodes do not share the same filesystem.
 
 Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

@@ -52,6 +52,19 @@ defmodule ClawCode.WorkflowServer do
           %__MODULE__{workflow_id: workflow_id}
       end
 
+    state =
+      if state.persisted_workflow_path do
+        state
+      else
+        persist(state)
+      end
+
+    ClawCode.ClusterDaemon.claim_local_owner(
+      :workflow,
+      workflow_id,
+      persisted_path: state.persisted_workflow_path
+    )
+
     {:ok, state}
   end
 
@@ -101,8 +114,15 @@ defmodule ClawCode.WorkflowServer do
     {:reply, snapshot_map(state), state}
   end
 
+  @impl true
+  def terminate(_reason, %__MODULE__{workflow_id: workflow_id}) do
+    safe_cluster_update(fn -> ClawCode.ClusterDaemon.mark_stopped(:workflow, workflow_id) end)
+    :ok
+  end
+
   defp persist(%__MODULE__{} = state) do
     path = ClawCode.WorkflowStore.save(snapshot_map(state))
+    safe_cluster_update(fn -> ClawCode.ClusterDaemon.note_persisted(:workflow, state.workflow_id, path) end)
     %{state | persisted_workflow_path: path}
   end
 
@@ -119,4 +139,10 @@ defmodule ClawCode.WorkflowServer do
   defp maybe_put_description(step, detail), do: Map.put(step, "description", detail)
 
   defp via(workflow_id), do: {:via, Registry, {ClawCode.WorkflowRegistry, workflow_id}}
+
+  defp safe_cluster_update(fun) do
+    fun.()
+  catch
+    :exit, _reason -> :ok
+  end
 end

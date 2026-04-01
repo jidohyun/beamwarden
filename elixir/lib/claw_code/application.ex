@@ -4,6 +4,10 @@ defmodule ClawCode.Application do
 
   @impl true
   def start(_type, _args) do
+    if System.get_env("MIX_ENV") == "test" do
+      File.rm_rf!(ClawCode.session_root())
+    end
+
     children = [
       {ClawCode.DaemonSupervisor, []}
     ]

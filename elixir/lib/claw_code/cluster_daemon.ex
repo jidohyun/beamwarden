@@ -173,6 +173,8 @@ defmodule ClawCode.ClusterDaemon do
           |> then(&maybe_store_record(state, &1))
       end
 
+    clear_runtime_snapshot(state.runtime_dets, scope, identifier)
+
     {:reply, updated, state}
   end
 
@@ -437,6 +439,11 @@ defmodule ClawCode.ClusterDaemon do
       [{_key, snapshot}] -> snapshot
       [] -> nil
     end
+  end
+
+  defp clear_runtime_snapshot(runtime_dets, scope, identifier) do
+    :ok = :dets.delete(runtime_dets, runtime_snapshot_key(scope, identifier))
+    :ok
   end
 
   defp freshest_record([]), do: nil

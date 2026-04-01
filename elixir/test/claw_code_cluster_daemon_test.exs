@@ -27,6 +27,8 @@ defmodule ClawCodeClusterDaemonTest do
     assert {:ok, _pid} =
              Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
 
+    wait_until(fn -> match?(%{}, ClawCode.ClusterDaemon.local_record(:session, session_id)) end)
+
     assert %{identifier: ^session_id, owner_node: ^owner_node} =
              ClawCode.ClusterDaemon.local_record(:session, session_id)
 

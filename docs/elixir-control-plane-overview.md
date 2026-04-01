@@ -4,6 +4,8 @@
 
 The Elixir port still follows the project's clean-room structural-mirror philosophy, but it now adds an OTP-native control plane that is better aligned with what Elixir is good at: supervision, resumability, and workflow/task coordination.
 
+It also owns the mirrored snapshot/reference data it executes against under `elixir/priv/reference_data`, so the Python and Rust trees are reference-only companions rather than active dependencies of the Mix workspace.
+
 ## What was added
 
 - `ClawCode.SessionServer` — supervised, resumable session processes backed by the existing query engine and session store.

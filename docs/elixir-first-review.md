@@ -47,6 +47,7 @@ The `mix claw` surface now covers four practical groups:
 ## Strengths
 
 - **Elixir is now the primary verified workspace.** The main verification loop is Mix-native and green.
+- **Elixir owns its snapshot inputs.** Mirrored command/tool/archive reference data now lives under `elixir/priv/reference_data`, so the active workspace no longer depends on `reference/python/` for checked-in inventories.
 - **The structural mirror is broad.** The Elixir tree now covers the missing Python-root concepts such as query/task/tool/repl/cost/onboarding helper modules.
 - **A real OTP control-plane slice exists.** `ClawCode.ControlPlane`, `SessionServer`, and `WorkflowServer` demonstrate supervised session/workflow behavior instead of documentation-only claims.
 - **CLI/tests stay aligned.** The ExUnit suite covers both the structural mirror and the control-plane commands.
@@ -55,7 +56,7 @@ The `mix claw` surface now covers four practical groups:
 
 - The control plane is still lightweight and local-first. It is not yet a clustered, long-lived orchestration runtime.
 - Most mirrored command/tool behavior is still descriptive shim execution rather than full Claude Code equivalence.
-- Rust remains the deeper runtime path for low-level execution concerns.
+- Rust remains the deeper runtime path for low-level execution concerns, but now as a reference subtree instead of an active primary workspace.
 
 ## Suggested reviewer smoke checks
 

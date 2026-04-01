@@ -1,12 +1,12 @@
-# Rusty Claude CLI
+# Rust Reference Subtree
 
-`rust/` contains the Rust workspace for the integrated `rusty-claude-cli` deliverable.
-It is intended to be something you can clone, build, and run directly.
+`reference/rust/` preserves the Rust workspace for the integrated `rusty-claude-cli` deliverable.
+It remains valuable as the repository's deeper runtime/reference implementation, but it is no longer the primary workspace for this repo. Use it as a reference subtree you can still inspect, build, and test directly when you need the Rust runtime path.
 
 ## Workspace layout
 
 ```text
-rust/
+reference/rust/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── README.md
@@ -29,7 +29,7 @@ rust/
 From the repository root:
 
 ```bash
-cd rust
+cd reference/rust
 cargo build --release -p rusty-claude-cli
 ```
 
@@ -44,7 +44,7 @@ The optimized binary will be written to:
 Run the verified workspace test suite used for release-readiness:
 
 ```bash
-cd rust
+cd reference/rust
 cargo test --workspace --exclude compat-harness
 ```
 
@@ -53,14 +53,14 @@ cargo test --workspace --exclude compat-harness
 ### Show help
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- --help
 ```
 
 ### Print version
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- --version
 ```
 
@@ -69,7 +69,7 @@ cargo run -p rusty-claude-cli -- --version
 Configure `settings.json` with an `oauth` block containing `clientId`, `authorizeUrl`, `tokenUrl`, optional `callbackPort`, and optional `scopes`, then run:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- login
 ```
 
@@ -78,7 +78,7 @@ This opens the browser, listens on the configured localhost callback, exchanges 
 ### Logout
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- logout
 ```
 
@@ -91,14 +91,14 @@ This removes only the stored OAuth credentials and preserves unrelated JSON fiel
 Send one prompt, stream the answer, then exit:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- prompt "Summarize the architecture of this repository"
 ```
 
 Use a specific model:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- --model claude-sonnet-4-20250514 prompt "List the key crates in this workspace"
 ```
 
@@ -107,7 +107,7 @@ cargo run -p rusty-claude-cli -- --model claude-sonnet-4-20250514 prompt "List t
 Start the interactive shell:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli --
 ```
 
@@ -131,14 +131,14 @@ Inside the REPL, useful commands include:
 Inspect or maintain a saved session file without entering the REPL:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- --resume session.json /status /compact /cost
 ```
 
 You can also inspect memory/config state for a restored session:
 
 ```bash
-cd rust
+cd reference/rust
 cargo run -p rusty-claude-cli -- --resume session.json /memory /config
 ```
 

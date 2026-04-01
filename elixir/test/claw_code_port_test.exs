@@ -31,6 +31,15 @@ defmodule ClawCodePortTest do
     assert length(ClawCode.Tools.ported_tools()) >= 100
   end
 
+  test "elixir owns the vendored reference data snapshots" do
+    assert ClawCode.reference_data_root() ==
+             Path.join(ClawCode.project_root(), "priv/reference_data")
+
+    refute ClawCode.reference_data_root() =~ "reference/python"
+    assert File.exists?(Path.join(ClawCode.reference_data_root(), "commands_snapshot.json"))
+    assert File.exists?(Path.join(ClawCode.subsystem_snapshot_root(), "cli.json"))
+  end
+
   test "commands and tools cli run" do
     commands_output =
       capture_io(fn ->

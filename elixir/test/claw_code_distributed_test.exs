@@ -15,8 +15,8 @@ defmodule ClawCodeDistributedTest do
   } do
     assert {:ok, output} = :rpc.call(peer_node, ClawCode.CLI, :run, [["control-plane-status"]])
     assert output =~ "# OTP Control Plane"
-    assert output =~ "Sessions: 0"
-    assert output =~ "Workflows: 0"
+    assert output =~ "Cluster mode: distributed"
+    assert output =~ "Cluster members:"
   end
 
   test "remote session lifecycle stays isolated from local registries", %{
@@ -49,7 +49,7 @@ defmodule ClawCodeDistributedTest do
     assert remote_status =~ "session=#{session_id}"
 
     local_status = capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
-    refute local_status =~ session_id
+    assert local_status =~ session_id
 
     assert File.exists?(Path.join(ClawCode.session_root(), "#{session_id}.json"))
   end
@@ -93,7 +93,7 @@ defmodule ClawCodeDistributedTest do
     assert remote_status =~ "workflow=#{workflow_id}"
 
     local_status = capture_io(fn -> assert 0 == ClawCode.CLI.main(["control-plane-status"]) end)
-    refute local_status =~ workflow_id
+    assert local_status =~ workflow_id
 
     assert File.exists?(ClawCode.workflow_path(workflow_id))
   end

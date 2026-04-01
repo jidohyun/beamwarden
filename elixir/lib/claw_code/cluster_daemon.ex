@@ -311,9 +311,7 @@ defmodule ClawCode.ClusterDaemon do
   defp maybe_broadcast(record) do
     if Node.alive?() and Process.whereis(ClawCode.ClusterTaskSupervisor) do
       Enum.each(Node.list(), fn target ->
-        Task.Supervisor.start_child(ClawCode.ClusterTaskSupervisor, fn ->
-          Cluster.rpc_call(target, __MODULE__, :merge_remote_record, [record])
-        end)
+        Cluster.rpc_call(target, __MODULE__, :merge_remote_record, [record])
       end)
     end
 

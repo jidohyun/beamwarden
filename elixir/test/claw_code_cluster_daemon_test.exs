@@ -24,10 +24,12 @@ defmodule ClawCodeClusterDaemonTest do
     assert :ok = Supervisor.terminate_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
     assert_receive {:DOWN, ^ref, :process, ^daemon_pid, _reason}, 5_000
 
-    assert {:ok, restarted_pid} =
-             Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
-
-    assert is_pid(restarted_pid)
+    wait_until(fn ->
+      case Process.whereis(ClawCode.ClusterDaemon) do
+        pid when is_pid(pid) -> pid != daemon_pid
+        _ -> false
+      end
+    end)
 
     assert %{identifier: ^session_id, owner_node: ^owner_node} =
              ClawCode.ClusterDaemon.local_record(:session, session_id)

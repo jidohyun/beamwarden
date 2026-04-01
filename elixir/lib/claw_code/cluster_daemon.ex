@@ -88,9 +88,7 @@ defmodule ClawCode.ClusterDaemon do
         table -> table
       end
 
-    {:ok, dets} =
-      :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
-
+    {:ok, dets} = :dets.open_file(@dets_table, file: String.to_charlist(ClawCode.cluster_ledger_path()))
     load_dets_into_ets(dets, table)
 
     {:ok, %{table: table, dets: dets, ledger_path: ClawCode.cluster_ledger_path()}}
@@ -139,13 +137,11 @@ defmodule ClawCode.ClusterDaemon do
           nil
 
         existing ->
-          maybe_store_record(
-            state,
-            existing
-            |> Map.put(:running, false)
-            |> Map.put(:lease_expires_at, now_ms())
-            |> Map.put(:updated_at, now_ms())
-          )
+          existing
+          |> Map.put(:running, false)
+          |> Map.put(:lease_expires_at, now_ms())
+          |> Map.put(:updated_at, now_ms())
+          |> maybe_store_record(state)
       end
 
     {:reply, updated, state}
@@ -311,7 +307,9 @@ defmodule ClawCode.ClusterDaemon do
   defp maybe_broadcast(record) do
     if Node.alive?() and Process.whereis(ClawCode.ClusterTaskSupervisor) do
       Enum.each(Node.list(), fn target ->
-        Cluster.rpc_call(target, __MODULE__, :merge_remote_record, [record])
+        Task.Supervisor.start_child(ClawCode.ClusterTaskSupervisor, fn ->
+          Cluster.rpc_call(target, __MODULE__, :merge_remote_record, [record])
+        end)
       end)
     end
 

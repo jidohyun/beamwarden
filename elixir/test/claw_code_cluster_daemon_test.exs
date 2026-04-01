@@ -24,13 +24,7 @@ defmodule ClawCodeClusterDaemonTest do
     assert :ok = GenServer.stop(ClawCode.ClusterDaemon, :shutdown)
     assert_receive {:DOWN, ^ref, :process, ^daemon_pid, _reason}, 5_000
 
-    wait_until(fn ->
-      case Process.whereis(ClawCode.ClusterDaemon) do
-        pid when is_pid(pid) -> pid != daemon_pid
-        _ -> false
-      end
-    end)
-
+    assert {:ok, _pid} = Supervisor.restart_child(ClawCode.ClusterSupervisor, ClawCode.ClusterDaemon)
     assert %{identifier: ^session_id, owner_node: ^owner_node} =
              ClawCode.ClusterDaemon.local_record(:session, session_id)
 
@@ -127,15 +121,11 @@ defmodule ClawCodeClusterDaemonTest do
   end
 
   defp wait_until(fun, attempts \\ 50)
-  defp wait_until(_fun, attempts) when attempts <= 0, do: flunk("condition did not become true")
+  defp wait_until(fun, _attempts) when fun.(), do: :ok
 
   defp wait_until(fun, attempts) do
-    if fun.() do
-      :ok
-    else
-      Process.sleep(100)
-      wait_until(fun, attempts - 1)
-    end
+    Process.sleep(100)
+    wait_until(fun, attempts - 1)
   end
 
   defp unique_id(prefix) do

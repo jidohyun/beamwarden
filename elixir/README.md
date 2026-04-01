@@ -82,4 +82,10 @@ Honest limits:
 - Quorum is based on the currently connected BEAM subcluster only; there is still no external consensus store or split-brain resolution beyond what the connected nodes can observe.
 - Session/workflow contents still resume from JSON snapshots, so durable routing metadata is stronger than durable payload storage when nodes do not share the same filesystem.
 
+Implementation references for these limits:
+
+- supervision tree: `lib/claw_code/application.ex`
+- routing/failover: `lib/claw_code/control_plane.ex`, `lib/claw_code/cluster.ex`
+- persisted ownership: `lib/claw_code/session_store.ex`, `lib/claw_code/workflow_store.ex`
+
 Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.

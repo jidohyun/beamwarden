@@ -59,22 +59,26 @@ defmodule ClawCode.CLI do
 
   def run(["session-status", session_id]) do
     case ClawCode.ControlPlane.session_snapshot(session_id) do
+      {:ok, session} ->
+        {:ok, ClawCode.ControlPlane.render_session(session)}
+
       {:error, :not_found} ->
         {:error, "Session not found: #{session_id}"}
 
-      session ->
-        {:ok, ClawCode.ControlPlane.render_session(session)}
+      {:error, reason} ->
+        {:error, "Failed to load session status: #{inspect(reason)}"}
     end
+  end
+
+  def run(["control-plane-status"]) do
+    {:ok, ClawCode.ControlPlane.status_report()}
   end
 
   def run(["submit-session", session_id, prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [limit: :integer])
 
     case ClawCode.ControlPlane.submit_session(session_id, prompt, limit: opts[:limit] || 5) do
-      {:error, :not_found} ->
-        {:error, "Session not found: #{session_id}"}
-
-      response ->
+      {:ok, response} ->
         {:ok,
          Enum.join(
            [
@@ -87,6 +91,12 @@ defmodule ClawCode.CLI do
            ],
            "\n"
          )}
+
+      {:error, :not_found} ->
+        {:error, "Session not found: #{session_id}"}
+
+      {:error, reason} ->
+        {:error, "Failed to submit session: #{inspect(reason)}"}
     end
   end
 
@@ -97,18 +107,54 @@ defmodule ClawCode.CLI do
         else: ClawCode.Tasks.from_descriptions(tasks)
 
     case ClawCode.ControlPlane.start_workflow(name, workflow_tasks) do
-      {:ok, workflow} -> {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
-      {:error, reason} -> {:error, "Failed to start workflow: #{inspect(reason)}"}
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
+      {:error, reason} ->
+        {:error, "Failed to start workflow: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-start", workflow_id]) do
+    case ClawCode.ControlPlane.start_workflow(workflow_id, []) do
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
+      {:error, reason} ->
+        {:error, "Failed to start workflow: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-add-step", workflow_id, title]) do
+    case ClawCode.ControlPlane.add_workflow_step(workflow_id, title) do
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
+      {:error, reason} ->
+        {:error, "Failed to add workflow step: #{inspect(reason)}"}
+    end
+  end
+
+  def run(["workflow-complete-step", workflow_id, step_id]) do
+    case ClawCode.ControlPlane.complete_workflow_step(workflow_id, step_id) do
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
+      {:error, reason} ->
+        {:error, "Failed to complete workflow step: #{inspect(reason)}"}
     end
   end
 
   def run(["workflow-status", workflow_id]) do
     case ClawCode.ControlPlane.workflow_snapshot(workflow_id) do
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
       {:error, :not_found} ->
         {:error, "Workflow not found: #{workflow_id}"}
 
-      workflow ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} ->
+        {:error, "Failed to load workflow status: #{inspect(reason)}"}
     end
   end
 
@@ -120,11 +166,14 @@ defmodule ClawCode.CLI do
       end
 
     case ClawCode.ControlPlane.advance_task(workflow_id, task_id, status, detail) do
+      {:ok, workflow} ->
+        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+
       {:error, :not_found} ->
         {:error, "Workflow not found: #{workflow_id}"}
 
-      workflow ->
-        {:ok, ClawCode.ControlPlane.render_workflow(workflow)}
+      {:error, reason} ->
+        {:error, "Failed to advance task: #{inspect(reason)}"}
     end
   end
 

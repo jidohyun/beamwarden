@@ -2,20 +2,22 @@
 
 This note captures the documentation and reviewer concerns for the **module/file namespace** migration from `ClawCode.*` / `elixir/lib/claw_code` to `Beamwarden.*` / `elixir/lib/beamwarden`.
 
-> Historical archive: this review documents the pre-breaking compatibility phase. References to `mix claw`, `CLAW_*`, `claw_code_daemon`, and `claw_code_cli` describe the compatibility window that existed before the final cleanup on 2026-04-02; they are not current operator guidance.
+> Historical note: this review documents the pre-breaking compatibility phase. The later breaking cleanup removed `mix claw`, `CLAW_*` env fallbacks, and the old `claw_code_daemon` / `claw_code_cli` runtime labels.
 
-It originally traveled with the Phase 4 implementation so the code rename and the docs review stayed aligned.
+It is meant to travel with the Phase 4 implementation so the code rename and the docs review stay aligned.
 
-## Historical constraints for the phase-4 review
+> Historical note: the temporary compatibility surfaces described here were removed by the final breaking Beamwarden cleanup on 2026-04-02. Keep this file as phase-specific review context, not as the current operator contract.
 
-These bullets describe the assumptions that existed during the compatibility window and should be read as historical review context, not as the current operator contract:
+## Constraints that should not regress
+
+The Phase 4 rename should preserve the already-landed runtime compatibility surface:
 
 - the OTP app stays `:beamwarden`
 - the preferred Beamwarden CLI continues to work during this slice
 - daemon-first behavior stays intact
 - the current Beamwarden env vars remain the preferred operator surface
-- temporary legacy env-var fallbacks existed during the slice
-- older daemon node labels remained a short-lived compatibility detail during the slice
+- older env-var aliases remain compatibility fallbacks during the slice
+- older daemon node labels stay documented until the runtime contract changes in a separate slice
 
 ## Code-review hotspots for the namespace move
 
@@ -66,9 +68,9 @@ Apply these rules when syncing docs with the renamed implementation:
 1. Replace `ClawCode.*` with `Beamwarden.*` for live module references.
 2. Replace `elixir/lib/claw_code/...` with `elixir/lib/beamwarden/...` for live file-path references.
 3. Keep `mix beamwarden ...` as the preferred command surface.
-4. If a historical alias must be mentioned, label it as archival compatibility context rather than live operator guidance.
+4. Keep any temporary compatibility aliases documented only as aliases.
 5. Do **not** automatically rename daemon node examples unless the runtime behavior changes too.
-6. Remove compatibility-era env-var fallback notes once the breaking cleanup has actually removed that support.
+6. Do **not** drop env-var fallback notes until the compatibility path is intentionally removed.
 
 ## Suggested post-rename smoke review
 
@@ -87,6 +89,6 @@ python3 -m unittest discover -s tests -v
 Then confirm:
 
 - `rg -n "\\bClawCode\\b|lib/claw_code" README.md docs elixir/test elixir/lib/mix/tasks`
-  only shows intentional historical or compatibility references
-- docs still describe `mix beamwarden` as preferred and label any older alias mentions as archival context only
-- docs that mention the daemon runtime clearly distinguish current Beamwarden naming from any historical compatibility notes
+  only shows intentional compatibility references
+- docs still describe `mix beamwarden` as preferred and any temporary aliasing as compatibility mode
+- docs that mention the daemon runtime still describe the current daemon-node naming and env-var fallback behavior accurately

@@ -6,16 +6,18 @@ This note captures the documentation and reviewer concerns for the **module/file
 
 It is meant to travel with the Phase 4 implementation so the code rename and the docs review stay aligned.
 
+> Historical note: the temporary compatibility surfaces described here were removed by the final breaking Beamwarden cleanup on 2026-04-02. Keep this file as phase-specific review context, not as the current operator contract.
+
 ## Constraints that should not regress
 
 The Phase 4 rename should preserve the already-landed runtime compatibility surface:
 
 - the OTP app stays `:beamwarden`
-- both `mix beamwarden ...` and `mix claw ...` continue to work during this slice
+- the preferred Beamwarden CLI continues to work during this slice
 - daemon-first behavior stays intact
-- `BEAMWARDEN_*` env vars remain the preferred operator surface
-- older `CLAW_*` env vars remain compatibility fallbacks
-- existing daemon node labels such as `claw_code_daemon` stay documented until the runtime contract changes in a separate slice
+- the current Beamwarden env vars remain the preferred operator surface
+- older env-var aliases remain compatibility fallbacks during the slice
+- older daemon node labels stay documented until the runtime contract changes in a separate slice
 
 ## Code-review hotspots for the namespace move
 
@@ -23,12 +25,11 @@ When the implementation lands, re-check these areas together instead of treating
 
 - `elixir/mix.exs`
   - `mod: {ClawCode.Application, []}` must move to the Beamwarden module namespace
-- `elixir/lib/mix/tasks/claw.ex`
-  - should remain as the compatibility CLI entrypoint
-  - runtime dispatch will still need to reach the renamed CLI module
 - `elixir/lib/mix/tasks/beamwarden.ex`
   - should remain the preferred CLI entrypoint
   - runtime dispatch should match the renamed CLI module too
+- temporary compatibility task entrypoints
+  - should still reach the renamed CLI module while the transition remains active
 - `elixir/lib/claw_code.ex`
   - root helper functions and path helpers must move with the rest of the namespace
 - `elixir/lib/claw_code/**/*.ex`
@@ -67,9 +68,9 @@ Apply these rules when syncing docs with the renamed implementation:
 1. Replace `ClawCode.*` with `Beamwarden.*` for live module references.
 2. Replace `elixir/lib/claw_code/...` with `elixir/lib/beamwarden/...` for live file-path references.
 3. Keep `mix beamwarden ...` as the preferred command surface.
-4. Keep `mix claw ...` documented only as a compatibility alias.
-5. Do **not** automatically rename daemon node examples like `claw_code_daemon` unless the runtime behavior changes too.
-6. Do **not** drop the `CLAW_*` env-var fallback notes until the compatibility path is intentionally removed.
+4. Keep any temporary compatibility aliases documented only as aliases.
+5. Do **not** automatically rename daemon node examples unless the runtime behavior changes too.
+6. Do **not** drop env-var fallback notes until the compatibility path is intentionally removed.
 
 ## Suggested post-rename smoke review
 
@@ -89,5 +90,5 @@ Then confirm:
 
 - `rg -n "\\bClawCode\\b|lib/claw_code" README.md docs elixir/test elixir/lib/mix/tasks`
   only shows intentional compatibility references
-- docs still describe `mix beamwarden` as preferred and `mix claw` as compatibility mode
+- docs still describe `mix beamwarden` as preferred and any temporary aliasing as compatibility mode
 - docs that mention the daemon runtime still describe the current daemon-node naming and env-var fallback behavior accurately

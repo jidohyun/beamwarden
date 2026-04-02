@@ -302,17 +302,23 @@ for a TUI dashboard.
 - recover runs after daemon restart
 - document failure semantics
 
-### Phase 4 — brokered lifecycle hardening
-- add true live log broker semantics behind `logs --follow`
-- extend cluster lease semantics to orchestration runs, workers, and broker ownership
-- make cleanup/retention lease-aware for run, worker, and event artifacts
-- keep the existing CLI surface while enriching lifecycle metadata and degraded-mode markers
+### Phase 4 — live broker + multi-node lifecycle
+- replace persisted-event polling follow with broker-backed live follow semantics
+- assign event ids/cursors so replay and live delivery share one operator-visible stream
+- extend run/task/worker lifecycle reporting with `stale`, `expired`, and `recovered` semantics
+- reuse cluster lease/epoch ideas for orchestrator work ownership across nodes
+- make cleanup/retention lease-aware for runs, workers, and event artifacts
+- keep the existing command shapes (`logs`, `worker-list`, `cleanup-state`, `cleanup-runs`) while improving their semantics
 
-### Phase 5 — multi-node execution and operator UX
-- spawn workers on connected nodes
-- route tasks by node health/capability
-- use Phase 4 lease semantics for reassignment/failover
-- add `monitor` TUI, event timeline views, and richer queue/worker inspection
+See also:
+
+- `docs/beamwarden-orchestrator-phase4-review.md`
+- `docs/plans/2026-04-02-beamwarden-orchestrator-phase4-plan.md`
+
+### Phase 5 — operator UX
+- add `monitor` TUI
+- add event timeline views
+- add richer queue and worker inspection
 
 ## Risks
 

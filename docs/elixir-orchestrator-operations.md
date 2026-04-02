@@ -141,7 +141,29 @@ Phase 4 is the broker/lifecycle/retention hardening slice. The current Phase 3 r
 - **keep operator output compact** — recovery metadata should clarify why a task moved instead of turning `logs` into raw process replay
 - **document bounded retention** — operators need to know which files are durable state vs recyclable cache/history
 
-See also `docs/beamwarden-orchestrator-phase4-design.md` for the implementation-oriented Phase 4 proposal.
+## Phase 4 extension design
+
+Phase 4 should keep the same operator commands while making three concrete improvements:
+
+1. **broker-backed live follow**
+   - `logs <run-id> --follow` should still replay persisted history first
+   - after replay, follow should switch to a true live broker path rather than polling only for newly persisted rows
+   - the rendered stream should label `source=replay` vs `source=live` so operators can tell what they are seeing
+2. **multi-node lifecycle clarity**
+   - `run-status`, `task-list`, and `worker-list` should distinguish `active`, `stale`, `expired`, `cancel_requested`, `cancelled`, `failed`, and `recovered`
+   - recovery should append explicit events before a task is requeued or moved
+3. **lease-aware cleanup**
+   - `cleanup-state` / `cleanup-runs` should consult lease and ownership evidence before deleting persisted artifacts
+   - cleanup output should explain why data was skipped (`active_lease`, `recovery_window`, `reachable_owner`), not only what was deleted
+
+The important contract change is semantic, not syntactic: Beamwarden should become **more honest and more distributed** without forcing operators to learn a second CLI.
+
+## Related design docs
+
+For the concrete Phase 4 implementation-oriented design, see:
+
+- `docs/beamwarden-orchestrator-phase4-review.md`
+- `docs/plans/2026-04-02-beamwarden-orchestrator-phase4-plan.md`
 
 ## Review notes for this slice
 

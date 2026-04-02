@@ -9,7 +9,6 @@ defmodule Beamwarden.Application do
     end
 
     children = [
-      {Beamwarden.OrchestratorSupervisor, []},
       {Beamwarden.DaemonSupervisor, []}
     ]
 

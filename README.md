@@ -133,12 +133,12 @@ mix beamwarden daemon-run --name claw_code_daemon
 
 ```bash
 cd elixir
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) \
-CLAW_DAEMON_COOKIE=clawcluster \
+BEAMWARDEN_DAEMON_NODE=claw_code_daemon@$(hostname -s) \
+BEAMWARDEN_DAEMON_COOKIE=clawcluster \
 mix beamwarden daemon-status
 ```
 
-Prefer `BEAMWARDEN_*` env vars going forward. `CLAW_*` remains available as a compatibility fallback during the rename transition.
+Prefer `BEAMWARDEN_*` env vars going forward. `CLAW_*` remains available as a compatibility fallback during the rename transition, and the runtime still keeps the established `claw_code_daemon` / `claw_code_cli` node labels until that contract changes in a later slice.
 
 ---
 

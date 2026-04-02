@@ -11,10 +11,12 @@ It now ships:
 - a dedicated `Beamwarden.DaemonSupervisor` root boundary
 - a supervised `Beamwarden.ClusterDaemon` ownership ledger backed by DETS
 - `Beamwarden.DaemonNodeMonitor` reconciliation on node membership changes
-- daemon-aware CLI proxying through `CLAW_DAEMON_NODE` / configured daemon mode
+- daemon-aware CLI proxying through `BEAMWARDEN_DAEMON_NODE` with `CLAW_*` compatibility fallbacks
 - longname-aware daemon/client startup for cross-host operation when the daemon host uses an FQDN
 - daemon-first routing for new session/workflow work handled on the configured server node
 - distributed ExUnit coverage proving that one client can create session state through the daemon and another client can inspect the same state without depending on the first client process surviving
+
+The runtime still keeps the existing `claw_code_daemon` / `claw_code_cli` node labels in this slice so cross-node operator workflows do not break during the rename transition.
 
 ## What improved in the three hardening slices
 

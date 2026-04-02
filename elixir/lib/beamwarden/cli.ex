@@ -138,11 +138,15 @@ defmodule Beamwarden.CLI do
     {opts, _, _} = OptionParser.parse(rest, strict: [follow: :boolean])
 
     case Beamwarden.Orchestrator.logs(run_id) do
-      {:ok, events} ->
+      {:ok, report} ->
         output =
-          Beamwarden.Orchestrator.render_logs(run_id, events) <>
+          Beamwarden.Orchestrator.render_logs(report) <>
             if(opts[:follow],
-              do: "\nfollow=not_implemented_showing_persisted_events_only",
+              do:
+                if(Beamwarden.Orchestrator.logs(run_id) |> elem(1) |> Map.get(:follow_supported),
+                  do: "\nfollow=requested_runtime_snapshot_replayed_once",
+                  else: "\nfollow=requested_persisted_snapshot_replayed_once"
+                ),
               else: ""
             )
 
@@ -154,6 +158,12 @@ defmodule Beamwarden.CLI do
       {:error, reason} ->
         {:error, "Failed to load logs: #{inspect(reason)}"}
     end
+  end
+
+  def run_local(["cleanup-runs" | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [ttl_seconds: :integer])
+    {:ok, report} = Beamwarden.Orchestrator.cleanup_runs(ttl_seconds: opts[:ttl_seconds] || 3_600)
+    {:ok, Beamwarden.Orchestrator.render_cleanup(report)}
   end
 
   def run_local(["worker-list"]) do

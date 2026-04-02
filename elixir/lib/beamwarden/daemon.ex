@@ -202,7 +202,8 @@ defmodule Beamwarden.Daemon do
           "retry-task",
           "cancel-run",
           "worker-list",
-          "logs"
+          "logs",
+          "cleanup-runs"
         ]
 
       _ ->

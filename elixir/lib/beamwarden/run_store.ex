@@ -17,5 +17,27 @@ defmodule Beamwarden.RunStore do
     end
   end
 
+  def list do
+    Beamwarden.run_root()
+    |> Path.join("*.json")
+    |> Path.wildcard()
+    |> Enum.map(&load_file/1)
+    |> Enum.sort_by(&value(&1, :run_id))
+  end
+
+  def delete(run_id) do
+    case File.rm(Beamwarden.run_path(run_id)) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp load_file(path) do
+    path
+    |> File.read!()
+    |> JSON.decode!()
+  end
+
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 end

@@ -42,6 +42,7 @@ The Elixir workspace currently provides:
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
 - tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, and `logs`
+- explicit replay-only log semantics for `mix beamwarden logs <run-id> --follow` until live streaming is implemented
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`
@@ -172,6 +173,7 @@ See the full operator guide:
 
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
+- `docs/beamwarden-orchestrator-phase3-review.md`
 
 ---
 
@@ -183,6 +185,7 @@ Start here if you want to understand the current system:
 - `docs/elixir-cluster-daemon-review.md`
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
+- `docs/beamwarden-orchestrator-phase3-review.md`
 
 Planning/history docs:
 
@@ -277,6 +280,7 @@ Important limits to keep in mind:
 - payload durability is still weaker than ownership/routing durability
 - cross-host operation is documented and partially exercised, but not validated as a real multi-machine production deployment here
 - test-only cleanup can differ from long-running non-test runtime behavior
+- orchestrator snapshot/event retention is still Phase-2 style local persistence; lease-aware expiry/cleanup remains the next hardening slice
 
 ---
 

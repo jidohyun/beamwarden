@@ -77,9 +77,125 @@ defmodule Beamwarden.Orchestrator do
   end
 
   def logs(run_id) do
-    with {:ok, _snapshot} <- run_snapshot(run_id),
+    with {:ok, snapshot} <- run_snapshot(run_id),
          {:ok, events} <- Beamwarden.EventStore.list(run_id) do
-      {:ok, events}
+      active? = Beamwarden.RunServer.running?(run_id)
+
+      {:ok,
+       %{
+         run_id: run_id,
+         run_status: value(snapshot, :status),
+         run_lifecycle: value(snapshot, :lifecycle) || "active",
+         source: if(active?, do: "runtime", else: "persisted"),
+         follow_supported: active?,
+         events: events
+       }}
+    end
+  end
+
+  def cleanup_runs(opts \\ []) do
+    ttl_seconds = Keyword.get(opts, :ttl_seconds, 3_600)
+    cutoff = DateTime.add(DateTime.utc_now(), -ttl_seconds, :second)
+
+    runs = Beamwarden.RunStore.list()
+
+    {stale_runs, skipped_active_runs} =
+      Enum.split_with(runs, fn run ->
+        run_id = value(run, :run_id)
+
+        !Beamwarden.RunServer.running?(run_id) and
+          cleanup_eligible_run?(run) and
+          older_than?(value(run, :updated_at), cutoff)
+      end)
+
+    deleted_run_ids =
+      stale_runs
+      |> Enum.map(&value(&1, :run_id))
+      |> Enum.each(&Beamwarden.RunStore.delete/1)
+      |> then(fn _ -> Enum.map(stale_runs, &value(&1, :run_id)) end)
+
+    deleted_run_id_set = MapSet.new(deleted_run_ids)
+
+    deleted_worker_ids =
+      Beamwarden.WorkerStore.list()
+      |> Enum.filter(fn worker ->
+        worker_id = value(worker, :worker_id)
+        run_id = value(worker, :run_id)
+
+        Beamwarden.WorkerSupervisor.worker_pid(worker_id) == :error and
+          (MapSet.member?(deleted_run_id_set, run_id) or
+             ((is_nil(run_id) or !Beamwarden.RunServer.running?(run_id)) and
+                older_than?(worker_freshness_timestamp(worker), cutoff)))
+      end)
+      |> Enum.map(fn worker ->
+        worker_id = value(worker, :worker_id)
+        :ok = Beamwarden.WorkerStore.delete(worker_id)
+        worker_id
+      end)
+
+    deleted_event_run_ids =
+      Beamwarden.EventStore.list_run_ids()
+      |> Enum.filter(fn run_id ->
+        MapSet.member?(deleted_run_id_set, run_id) or
+          (!Beamwarden.RunServer.running?(run_id) and not run_exists?(run_id) and
+             older_than?(event_timestamp(run_id), cutoff))
+      end)
+      |> Enum.map(fn run_id ->
+        :ok = Beamwarden.EventStore.delete(run_id)
+        run_id
+      end)
+
+    {:ok,
+     %{
+       ttl_seconds: ttl_seconds,
+       deleted_run_ids: deleted_run_ids,
+       deleted_worker_ids: deleted_worker_ids,
+       deleted_event_run_ids: deleted_event_run_ids,
+       skipped_active_run_ids: Enum.map(skipped_active_runs, &value(&1, :run_id))
+     }}
+  end
+
+  def render_cleanup(report) do
+    [
+      "Cleanup Runs",
+      "",
+      "ttl_seconds=#{value(report, :ttl_seconds)}",
+      "deleted_run_count=#{length(value(report, :deleted_run_ids) || [])}",
+      "deleted_worker_count=#{length(value(report, :deleted_worker_ids) || [])}",
+      "deleted_event_count=#{length(value(report, :deleted_event_run_ids) || [])}",
+      "skipped_active_count=#{length(value(report, :skipped_active_run_ids) || [])}",
+      maybe_csv("deleted_runs", value(report, :deleted_run_ids)),
+      maybe_csv("deleted_workers", value(report, :deleted_worker_ids)),
+      maybe_csv("deleted_event_runs", value(report, :deleted_event_run_ids)),
+      maybe_csv("skipped_active_runs", value(report, :skipped_active_run_ids))
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp maybe_csv(_label, nil), do: nil
+  defp maybe_csv(_label, []), do: nil
+  defp maybe_csv(label, values), do: "#{label}=#{Enum.join(values, ",")}"
+
+  defp cleanup_eligible_run?(run) do
+    value(run, :status) in ["completed", "failed", "cancelled"]
+  end
+
+  defp worker_freshness_timestamp(worker) do
+    value(worker, :last_event_at) ||
+      value(worker, :heartbeat_at) ||
+      value(worker, :updated_at) ||
+      value(worker, :started_at)
+  end
+
+  defp event_timestamp(run_id) do
+    path = Beamwarden.event_path(run_id)
+
+    with {:ok, stat} <- File.stat(path),
+         {:ok, datetime} <- DateTime.from_unix(stat.mtime) do
+      datetime
+    else
+      _ -> nil
     end
   end
 
@@ -93,6 +209,7 @@ defmodule Beamwarden.Orchestrator do
       "",
       "run_id=#{value(snapshot, :run_id)}",
       "status=#{value(snapshot, :status)}",
+      "lifecycle=#{value(snapshot, :lifecycle) || "active"}",
       "task_count=#{value(snapshot, :task_count)}",
       "completed_count=#{value(snapshot, :completed_count)}",
       "failed_count=#{value(snapshot, :failed_count)}",
@@ -162,16 +279,20 @@ defmodule Beamwarden.Orchestrator do
     |> Enum.join("\n")
   end
 
-  def render_logs(run_id, events) do
+  def render_logs(report) do
     [
       "Run Logs",
       "",
-      "run_id=#{run_id}",
-      "event_count=#{length(events)}",
-      if(events == [],
+      "run_id=#{value(report, :run_id)}",
+      "run_status=#{value(report, :run_status)}",
+      "run_lifecycle=#{value(report, :run_lifecycle)}",
+      "event_source=#{value(report, :source)}",
+      "follow_supported=#{value(report, :follow_supported)}",
+      "event_count=#{length(value(report, :events) || [])}",
+      if((value(report, :events) || []) == [],
         do: "none",
         else:
-          Enum.map(events, fn event ->
+          Enum.map(value(report, :events) || [], fn event ->
             format_event(event)
           end)
       )
@@ -200,6 +321,23 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_text(_label, ""), do: nil
   defp maybe_text(label, value), do: "#{label}=#{value}"
   defp truthy?(map, key), do: value(map, key) in [true, "true"]
+
+  defp older_than?(nil, _cutoff), do: false
+
+  defp older_than?(%DateTime{} = datetime, %DateTime{} = cutoff) do
+    DateTime.compare(datetime, cutoff) in [:lt, :eq]
+  end
+
+  defp older_than?(timestamp, %DateTime{} = cutoff) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, datetime, _offset} -> older_than?(datetime, cutoff)
+      _ -> false
+    end
+  end
+
+  defp run_exists?(run_id) do
+    File.exists?(Beamwarden.run_path(run_id))
+  end
 
   defp persisted_state_text(worker) do
     persisted_state = value(worker, :persisted_state)

@@ -30,6 +30,14 @@ defmodule Beamwarden.WorkerStore do
     |> Enum.sort_by(&value(&1, :worker_id))
   end
 
+  def delete(worker_id) do
+    case File.rm(Beamwarden.worker_path(worker_id)) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp load_file(path) do
     path
     |> File.read!()

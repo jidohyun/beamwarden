@@ -3,11 +3,9 @@ defmodule BeamwardenAppIdentityTest do
 
   setup do
     previous_runtime = Application.get_env(Beamwarden.AppIdentity.runtime_app(), :daemon_node)
-    previous_legacy = Application.get_env(Beamwarden.AppIdentity.legacy_app(), :daemon_node)
 
     on_exit(fn ->
       restore_env(Beamwarden.AppIdentity.runtime_app(), previous_runtime)
-      restore_env(Beamwarden.AppIdentity.legacy_app(), previous_legacy)
     end)
 
     Beamwarden.AppIdentity.delete_env(:daemon_node)
@@ -16,7 +14,6 @@ defmodule BeamwardenAppIdentityTest do
 
   test "runtime app stays beamwarden while the legacy app hook remains available" do
     assert Beamwarden.AppIdentity.runtime_app() == :beamwarden
-    assert Beamwarden.AppIdentity.legacy_app() == :claw_code
   end
 
   test "compatibility helper prefers beamwarden config while falling back to the legacy app" do

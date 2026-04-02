@@ -2,12 +2,8 @@ defmodule Beamwarden.AppIdentity do
   @moduledoc false
 
   @runtime_app :beamwarden
-  @legacy_app :claw_code
 
   def runtime_app, do: @runtime_app
-  def legacy_app, do: @legacy_app
-  def known_apps, do: [@runtime_app, @legacy_app]
-  def config_apps, do: known_apps()
 
   def ensure_started do
     ensure_runtime_started()
@@ -21,9 +17,7 @@ defmodule Beamwarden.AppIdentity do
   end
 
   def get_env(key, default \\ nil) do
-    Enum.find_value(known_apps(), default, fn app ->
-      Application.get_env(app, key)
-    end)
+    Application.get_env(runtime_app(), key, default)
   end
 
   def put_env(key, value) do
@@ -31,7 +25,7 @@ defmodule Beamwarden.AppIdentity do
   end
 
   def delete_env(key) do
-    Enum.each(config_apps(), &Application.delete_env(&1, key))
+    Application.delete_env(runtime_app(), key)
     :ok
   end
 end

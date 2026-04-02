@@ -39,7 +39,6 @@ defmodule BeamwardenPortTest do
 
   test "app identity helper keeps beamwarden as the live runtime app" do
     assert Beamwarden.AppIdentity.runtime_app() == :beamwarden
-    assert Beamwarden.AppIdentity.legacy_app() == :claw_code
     assert :ok = Beamwarden.AppIdentity.ensure_runtime_started()
   end
 

@@ -7,20 +7,54 @@ defmodule BeamwardenOrchestratorPhase3Test do
     run_id = unique_id("phase3-lifecycle")
     on_exit(fn -> cleanup_run_artifacts(run_id) end)
 
-    assert {:ok, _snapshot} =
+    executor = fn task ->
+      send(parent, {:follow_worker_started, task.task_id, task.attempt})
+
+      receive do
+        {:release_follow_worker, attempt} when attempt == task.attempt -> {:ok, "follow complete"}
+      after
+        1_500 -> {:error, "timed out waiting for follow release"}
+      end
+    end
+
+    assert {:ok, snapshot} =
              Beamwarden.Orchestrator.start_run("review this repo",
                run_id: run_id,
                workers: 1,
                await_timeout: 1_500
              )
 
-    output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["run-status", run_id])
+    [task] = snapshot.tasks
+    [worker_id] = snapshot.worker_ids
+    assert_receive {:follow_worker_started, ^task.task_id, 1}, 1_000
+
+    follower =
+      Task.async(fn ->
+        capture_io(fn ->
+          assert 0 ==
+                   Beamwarden.CLI.main([
+                     "logs",
+                     run_id,
+                     "--follow",
+                     "--follow-interval-ms",
+                     "25",
+                     "--follow-timeout-ms",
+                     "1500"
+                   ])
+        end)
       end)
 
-    assert output =~ "run_id=#{run_id}"
-    assert output =~ "lifecycle=active"
+    Process.sleep(100)
+    assert {:ok, worker_pid} = Beamwarden.WorkerSupervisor.worker_pid(worker_id)
+    send(worker_pid, {:release_follow_worker, 1})
+
+    output = Task.await(follower, 2_000)
+
+    assert output =~ "Run Logs"
+    assert output =~ "follow=streaming"
+    assert output =~ "task_assigned"
+    assert output =~ "task_completed"
+    assert output =~ "follow=complete status=completed"
   end
 
   test "logs surfaces persisted lifecycle/source semantics when follow is requested" do

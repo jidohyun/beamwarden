@@ -42,7 +42,8 @@ The Elixir workspace currently provides:
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
 - tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, and `logs`
-- explicit replay-only log semantics for `mix beamwarden logs <run-id> --follow` until live streaming is implemented
+- follow-mode log streaming via `mix beamwarden logs <run-id> --follow`
+- persisted orchestration cleanup via `mix beamwarden cleanup-state --older-than-seconds <seconds>`
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`

@@ -20,12 +20,12 @@ mix beamwarden worker-list
 mix beamwarden retry-task <run-id> <task-id>
 mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
-mix beamwarden cleanup-runs [--ttl-seconds 3600]
+mix beamwarden logs <run-id> --follow
+mix beamwarden cleanup-state --older-than-seconds 86400
 ```
 
-`logs --follow` remains a **single-shot replay hint** in this slice: Beamwarden reports whether the log view is coming from a live runtime or only from persisted state, then replays the stored event summary once.
-
-Today `logs --follow` is intentionally conservative: it replays the currently available event snapshot exactly once and then exits. When the run is still active, the CLI labels that output as a runtime snapshot replay; when the run is no longer active, it labels it as a persisted snapshot replay. In both cases Beamwarden avoids pretending it is tailing a live process stream.
+`logs` should always provide a persisted summary view.
+`logs --follow` should stream newly persisted orchestration events until the run settles into a terminal state (or until an explicit follow timeout is hit).
 
 ## Worker reporting: active vs persisted
 
@@ -86,19 +86,23 @@ That gives Beamwarden an answer to "what happened?" even after the worker proces
 
 ## Persisted-state cleanup / expiry
 
-Long-lived operator workspaces need a way to prune old orchestration artifacts once a run is clearly over.
+Beamwarden keeps run snapshots, worker snapshots, and event logs under `.port_sessions/`.
+Those files are intentionally durable enough for post-run debugging, but they should not accumulate forever.
 
-`cleanup-runs --ttl-seconds <n>` removes **terminal persisted runs** older than the TTL and also prunes their related:
+Use:
 
-- persisted run snapshots
-- persisted worker snapshots
-- persisted event files
+```bash
+mix beamwarden cleanup-state --older-than-seconds 86400
+```
 
-Guardrails:
+Expected behavior:
 
-- active runs are skipped even if their persisted snapshot is older than the TTL
-- fresh persisted runs are kept for inspection/recovery
-- orphaned persisted worker/event files older than the TTL are also removed
+- delete only **persisted** run snapshots whose status is already terminal (`completed`, `failed`, `cancelled`)
+- skip any run that still has a live `RunServer`
+- delete persisted worker snapshots whose worker process is no longer registered
+- delete event files for removed runs (and other orphaned old event logs)
+
+This keeps cleanup conservative: Beamwarden prunes expired history, but it does not delete potentially recoverable in-flight runtime state.
 
 ## Review notes for this slice
 

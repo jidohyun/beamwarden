@@ -31,12 +31,10 @@ defmodule Beamwarden.WorkerStore do
   end
 
   def delete(worker_id) do
-    Beamwarden.worker_path(worker_id)
-    |> File.rm()
-    |> case do
+    case File.rm(Beamwarden.worker_path(worker_id)) do
       :ok -> :ok
       {:error, :enoent} -> :ok
-      error -> error
+      {:error, reason} -> {:error, reason}
     end
   end
 

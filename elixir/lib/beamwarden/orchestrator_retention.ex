@@ -52,10 +52,7 @@ defmodule Beamwarden.OrchestratorRetention do
 
     status in ["completed", "failed", "cancelled"] and
       not Beamwarden.RunServer.running?(run_id) and
-      older_than_cutoff?(
-        snapshot_time(snapshot, [:finished_at, :updated_at, :created_at]),
-        cutoff
-      )
+      older_than_cutoff?(snapshot_time(snapshot, [:finished_at, :updated_at, :created_at]), cutoff)
   end
 
   defp expired_worker?(snapshot, cutoff) do
@@ -80,8 +77,9 @@ defmodule Beamwarden.OrchestratorRetention do
   defp event_file_older_than_cutoff?(run_id, cutoff) do
     case File.stat(Beamwarden.event_path(run_id), time: :posix) do
       {:ok, stat} ->
-        datetime = DateTime.from_unix!(stat.mtime)
-        DateTime.compare(datetime, cutoff) in [:lt, :eq]
+        stat.mtime
+        |> DateTime.from_unix!()
+        |> DateTime.compare(cutoff) in [:lt, :eq]
 
       {:error, _reason} ->
         false

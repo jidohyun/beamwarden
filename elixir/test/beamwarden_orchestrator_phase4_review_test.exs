@@ -156,9 +156,9 @@ defmodule BeamwardenOrchestratorPhase4ReviewTest do
                  ])
       end)
 
-    assert cleanup_output =~ "deleted_run_count=0"
-    assert cleanup_output =~ "deleted_worker_count=0"
-    assert cleanup_output =~ "deleted_event_count=0"
+    refute cleanup_output =~ "deleted_runs=#{run_id}"
+    refute cleanup_output =~ worker_id
+    refute cleanup_output =~ "deleted_event_runs=#{run_id}"
     assert File.exists?(Beamwarden.run_path(run_id))
     assert File.exists?(Beamwarden.worker_path(worker_id))
     assert File.exists?(Beamwarden.event_path(run_id))

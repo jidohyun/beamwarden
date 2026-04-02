@@ -47,7 +47,7 @@ mix beamwarden workflow-status smoke-flow
 mix beamwarden advance-task smoke-flow 1 completed "done"
 ```
 
-`mix claw ...` remains available as a compatibility alias.
+`mix claw ...` remains available as a compatibility alias. `BEAMWARDEN_*` env vars are the preferred operator surface, `CLAW_*` still works as a compatibility fallback, and the existing `claw_code_daemon` / `claw_code_cli` node labels remain the live runtime contract for now.
 
 ## Verification
 

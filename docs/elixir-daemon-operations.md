@@ -10,6 +10,8 @@ The current daemon bootstrap supports both:
 - local shortname smoke tests via `mix beamwarden daemon-run`
 - longname-aware startup via `mix beamwarden daemon-run --longname`
 
+During this rename slice, the daemon runtime still uses the established `claw_code_daemon` / `claw_code_cli` node labels so existing distributed setups keep working while the Beamwarden command/env surfaces take over.
+
 For more controlled production-like operation, you can still prestart the BEAM VM yourself with `--name` / `--cookie` and then boot the daemon inside that already-distributed node.
 
 ## 1. Local single-host smoke test

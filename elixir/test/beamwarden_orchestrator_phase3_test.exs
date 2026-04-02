@@ -51,6 +51,8 @@ defmodule BeamwardenOrchestratorPhase3Test do
     output = Task.await(follower, 2_000)
 
     assert output =~ "Run Logs"
+    assert output =~ "event_source=persisted"
+    assert output =~ "follow_supported=true"
     assert output =~ "follow=streaming"
     assert output =~ "task_assigned"
     assert output =~ "follow=complete status="

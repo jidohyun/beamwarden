@@ -145,6 +145,10 @@ defmodule Beamwarden.Orchestrator do
                 "presence=#{value(worker, :presence) || "unknown"}",
                 "state=#{value(worker, :state)}",
                 "current_task_id=#{value(worker, :current_task_id) || "none"}",
+                "active_state=#{value(worker, :runtime_state) || "none"}",
+                "persisted_state=#{value(worker, :persisted_state) || "none"}",
+                "active_current_task_id=#{value(worker, :active_current_task_id) || "none"}",
+                "persisted_current_task_id=#{value(worker, :persisted_current_task_id) || "none"}",
                 maybe_text("last_task_status", value(worker, :last_task_status)),
                 maybe_text("persisted_state", persisted_state_text(worker)),
                 maybe_text("last_result", value(worker, :last_result_summary))

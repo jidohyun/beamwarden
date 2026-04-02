@@ -11,6 +11,8 @@ defmodule Beamwarden.ExternalWorker do
     :current_task_id,
     :last_result_summary,
     :last_task_status,
+    :persisted_state,
+    :persisted_current_task_id,
     :started_at,
     :heartbeat_at,
     :last_event_at,
@@ -43,12 +45,16 @@ defmodule Beamwarden.ExternalWorker do
   @impl true
   def init(opts) do
     now = now()
+    worker_id = Keyword.fetch!(opts, :worker_id)
+    persisted = load_persisted(worker_id)
 
     state = %__MODULE__{
-      worker_id: Keyword.fetch!(opts, :worker_id),
+      worker_id: worker_id,
       run_id: Keyword.fetch!(opts, :run_id),
       command: Keyword.get(opts, :command),
       executor: Keyword.get(opts, :executor),
+      persisted_state: value(persisted, :state),
+      persisted_current_task_id: value(persisted, :current_task_id),
       started_at: now,
       heartbeat_at: now,
       last_event_at: now
@@ -169,6 +175,8 @@ defmodule Beamwarden.ExternalWorker do
       state: state.state,
       current_task_id: state.current_task_id,
       last_task_status: state.last_task_status,
+      persisted_state: state.persisted_state,
+      persisted_current_task_id: state.persisted_current_task_id,
       started_at: state.started_at,
       heartbeat_at: state.heartbeat_at,
       last_event_at: state.last_event_at,
@@ -198,6 +206,13 @@ defmodule Beamwarden.ExternalWorker do
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp load_persisted(worker_id) do
+    case Beamwarden.WorkerStore.load(worker_id) do
+      {:ok, snapshot} -> snapshot
+      :error -> %{}
+    end
+  end
 
   defp via(worker_id), do: {:via, Registry, {Beamwarden.ExternalWorkerRegistry, worker_id}}
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))

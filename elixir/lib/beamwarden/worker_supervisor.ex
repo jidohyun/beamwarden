@@ -54,7 +54,16 @@ defmodule Beamwarden.WorkerSupervisor do
       |> Map.put(:presence, if(is_map(live_snapshot), do: "active", else: "persisted"))
       |> Map.put(:active, is_map(live_snapshot))
       |> Map.put(:runtime_state, value(live_snapshot, :state))
-      |> Map.put(:persisted_state, value(persisted_snapshot, :state))
+      |> Map.put(:active_current_task_id, value(live_snapshot, :current_task_id))
+      |> Map.put(
+        :persisted_state,
+        value(live_snapshot, :persisted_state) || value(persisted_snapshot, :state)
+      )
+      |> Map.put(
+        :persisted_current_task_id,
+        value(live_snapshot, :persisted_current_task_id) ||
+          value(persisted_snapshot, :current_task_id)
+      )
       |> Map.put(
         :last_task_status,
         value(preferred, :last_task_status) || value(persisted_snapshot, :last_task_status)
@@ -82,5 +91,6 @@ defmodule Beamwarden.WorkerSupervisor do
     end
   end
 
+  defp value(nil, _key), do: nil
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 end

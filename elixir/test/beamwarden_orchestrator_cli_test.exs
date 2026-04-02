@@ -74,8 +74,9 @@ defmodule BeamwardenOrchestratorCliTest do
 
     [task] = initial_snapshot.tasks
     [worker_id] = initial_snapshot.worker_ids
+    task_id = task.task_id
 
-    assert_receive {:worker_attempt_started, ^task.task_id, 1}, 1_000
+    assert_receive {:worker_attempt_started, ^task_id, 1}, 1_000
 
     cancel_output =
       capture_io(fn ->
@@ -103,7 +104,7 @@ defmodule BeamwardenOrchestratorCliTest do
     assert retry_output =~ "status=running"
     assert retry_output =~ "cancelled_count=0"
 
-    assert_receive {:worker_attempt_started, ^task.task_id, 2}, 1_000
+    assert_receive {:worker_attempt_started, ^task_id, 2}, 1_000
     send(worker_pid, {:release_attempt, 2})
 
     wait_until(fn ->

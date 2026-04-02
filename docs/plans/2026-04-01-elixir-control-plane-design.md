@@ -1,5 +1,7 @@
 # Elixir Control-Plane Design
 
+> Historical archive: this design note was written while an in-tree Rust reference subtree still existed. The Rust subtree has since been removed from Beamwarden; any Rust mentions below describe that earlier comparison target.
+
 ## Chosen direction
 We are treating Elixir as the repository's durable control-plane language rather than trying to beat Rust on raw execution speed. That means the Elixir workspace should be strongest at supervision, resumability, long-running sessions, workflow/task orchestration, and developer-facing introspection.
 

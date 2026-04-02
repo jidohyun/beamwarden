@@ -1,6 +1,6 @@
 # Evidence for the Python Companion Port Analysis
 
-> Historical note: these paths were written when the Python companion lived at the repo root. The Python mirror now lives under `reference/python/`, and Rust companion paths are now under `reference/rust/`.
+> Historical note: these paths were written when the Python companion lived at the repo root and a Rust reference subtree still existed in-tree. The Python mirror now lives under `reference/python/`. The Rust subtree has since been removed from Beamwarden, so any Rust paths below are archival references only.
 
 This appendix captures the concrete command outputs used to support `docs/claude-code-port-analysis.md`.
 

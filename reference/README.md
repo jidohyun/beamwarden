@@ -2,9 +2,10 @@
 
 This repository is now **Elixir-first**.
 
-The top-level `reference/` directory keeps the earlier companion implementations that still provide historical context and low-level runtime comparison points:
+The top-level `reference/` directory keeps only the earlier Python companion implementation:
 
-- `reference/python/` — the original clean-room Python mirror subtree
-- `reference/rust/` — the Rust runtime/reference subtree
+- `reference/python/` — the archived clean-room Python mirror subtree
 
-These trees are retained for reference and comparison only. The primary developer workflow and verification flow live under `elixir/`.
+It is retained for reference and comparison only. The primary developer workflow and verification flow live under `elixir/`.
+
+The earlier in-tree Rust reference subtree has been removed from the active repository. Historical documents may still mention it when describing older migration phases.

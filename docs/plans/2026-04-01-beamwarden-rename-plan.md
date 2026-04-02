@@ -4,7 +4,7 @@ Date: 2026-04-01
 Status: archived historical plan  
 Owner: leader synthesis from OMX team review
 
-> Historical archive: this document records the staged rename plan as it stood on 2026-04-01. The current operator-facing contract is Beamwarden-only. Any mentions of `mix claw`, `CLAW_*`, `claw_code_daemon`, or `claw_code_cli` below are retained strictly as compatibility-history context, not as supported commands or settings.
+> Historical archive: this document records the staged rename plan as it stood on 2026-04-01. The current operator-facing contract is Beamwarden-only. Any mentions of `mix claw`, `CLAW_*`, `claw_code_daemon`, `claw_code_cli`, or `reference/rust/` below are retained strictly as compatibility-history context, not as supported commands, settings, or active repository paths.
 >
 > Update on 2026-04-02: the OTP app rename to `:beamwarden` has landed. The remaining major rename topic captured here was the module/file namespace migration from `ClawCode.*` to `Beamwarden.*`.
 

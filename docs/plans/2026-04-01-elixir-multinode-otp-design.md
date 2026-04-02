@@ -1,5 +1,7 @@
 # Elixir Multi-node OTP Control-Plane Design
 
+> Historical archive: this note was written before the Rust subtree was removed from the repository. Any Rust mentions below refer to that earlier reference setup.
+
 ## Recommended direction
 Use built-in BEAM distribution primitives instead of adding dependencies.
 
@@ -12,7 +14,7 @@ Use built-in BEAM distribution primitives instead of adding dependencies.
 - local distributed tests using OTP's built-in peer-node capabilities where available
 
 ## Why this fits Elixir
-This makes Elixir more than a metadata mirror: it becomes the repo's actual orchestration/control-plane runtime, while Rust remains the low-level execution reference.
+This makes Elixir more than a metadata mirror: it becomes the repo's actual orchestration/control-plane runtime, while the then-existing Rust subtree remained the low-level execution reference.
 
 ## Guardrails
 - No new dependencies

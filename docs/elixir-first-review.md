@@ -56,7 +56,7 @@ The `mix beamwarden` surface now covers four practical groups:
 
 - The control plane is still lightweight and local-first. It is not yet a clustered, long-lived orchestration runtime.
 - Most mirrored command/tool behavior is still descriptive shim execution rather than full Claude Code equivalence.
-- Rust remains the deeper runtime path for low-level execution concerns, but now as a reference subtree instead of an active primary workspace.
+- Python remains as an archived comparison mirror, but there is no longer an in-tree Rust runtime path in this repository.
 
 ## Suggested reviewer smoke checks
 

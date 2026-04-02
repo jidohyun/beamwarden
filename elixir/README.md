@@ -84,4 +84,4 @@ Implementation references for these limits:
 - routing/failover: `lib/beamwarden/control_plane.ex`, `lib/beamwarden/cluster.ex`
 - persisted ownership: `lib/beamwarden/session_store.ex`, `lib/beamwarden/workflow_store.ex`
 
-Python and Rust remain in the repository as companion/reference subtrees (`reference/python/`, `reference/rust/`) rather than the primary workspace or a required Mix build input.
+Python remains in the repository as an archived reference subtree (`reference/python/`) rather than the primary workspace or a required Mix build input. The earlier in-tree Rust reference subtree has been removed.

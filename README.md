@@ -8,11 +8,11 @@ This project rebuilds selected Claude-style harness concepts as a **daemon-first
 - multi-node routing and daemon-aware CLI proxying
 - lightweight runtime recovery metadata (`runtime.dets`)
 - mirrored command/tool inventories for structural parity work
-- Python and Rust companion trees kept as **reference subtrees**, not primary workspaces
+- an archived Python companion tree kept as a **reference subtree**, not a primary workspace
 
 > **Primary workspace:** `elixir/`
 >
-> **Reference subtrees:** `reference/python/`, `reference/rust/`
+> **Archived reference subtree:** `reference/python/`
 
 ---
 
@@ -30,8 +30,7 @@ It is a **clean-room porting project** focused on:
 The current repository is best understood as:
 
 - **Elixir** = primary implementation workspace
-- **Python** = earlier structural mirror kept for comparison/reference
-- **Rust** = deeper runtime reference subtree kept for comparison/reference
+- **Python** = archived structural mirror kept for comparison/reference
 
 ---
 
@@ -83,8 +82,7 @@ In short: this is a strong **research/runtime port**, not a finished clone of th
 │   ├── lib/beamwarden
 │   └── test
 ├── reference/
-│   ├── python/                   # Historical Python mirror subtree
-│   └── rust/                     # Rust runtime/reference subtree
+│   └── python/                   # Archived Python mirror subtree
 ├── docs/
 │   ├── elixir-control-plane-overview.md
 │   ├── elixir-cluster-daemon-review.md
@@ -209,7 +207,7 @@ Mirrored inventory files:
 
 ---
 
-## Reference subtrees
+## Archived reference subtree
 
 ### `reference/python/`
 
@@ -227,10 +225,7 @@ cd reference/python
 python3 -m unittest discover -s tests -v
 ```
 
-### `reference/rust/`
-
-The Rust subtree remains a reference runtime for deeper low-level comparison.
-It is **not** the primary workspace for this repository.
+The earlier in-tree Rust reference subtree has been removed. Historical docs may still mention it as archival context, but it is no longer part of the active repository.
 
 ---
 
@@ -285,7 +280,7 @@ The project direction is to make Elixir the best home for:
 - daemonized multi-node orchestration
 - operationally clear BEAM-native runtime semantics
 
-This is the main reason the root README now centers the Elixir workspace instead of the historical Python port.
+This is the main reason the root README now centers the Elixir workspace instead of the archived Python port.
 
 ---
 

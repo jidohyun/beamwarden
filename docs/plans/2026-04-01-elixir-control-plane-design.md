@@ -11,5 +11,5 @@ We are treating Elixir as the repository's durable control-plane language rather
 ## Recommended implementation slices
 - Elixir mirror completeness: close the gap with the Python mirror surface.
 - OTP control plane: supervised sessions, task/workflow coordinator, state reporting.
-- CLI uplift: expose the new orchestration primitives through `mix claw`.
+- CLI uplift: expose the new orchestration primitives through the Beamwarden CLI (`mix beamwarden`). Earlier references to the legacy alias belong only in archived migration notes.
 - Tests/docs: make the Elixir-first story explicit and verifiable.

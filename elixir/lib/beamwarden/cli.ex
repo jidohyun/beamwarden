@@ -51,6 +51,51 @@ defmodule Beamwarden.CLI do
     {:ok, Beamwarden.ToolPool.as_markdown()}
   end
 
+  def run_local(["run", prompt | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [workers: :integer, run_id: :string])
+
+    run_opts =
+      [workers: opts[:workers] || 1]
+      |> maybe_put_option(:run_id, opts[:run_id])
+
+    with {:ok, snapshot} <-
+           Beamwarden.RunServer.start_run(prompt, run_opts) do
+      {:ok, Beamwarden.RunServer.wait_for_completion(snapshot.run_id) |> render_run_snapshot()}
+    else
+      {:error, {:already_started, _pid}} -> {:error, "Run already exists"}
+      {:error, reason} -> {:error, "Failed to start run: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["run-status", run_id]) do
+    case Beamwarden.RunServer.snapshot(run_id) do
+      %{"run_id" => _run_id} = snapshot -> {:ok, render_run_snapshot(snapshot)}
+      snapshot when is_map(snapshot) -> {:ok, render_run_snapshot(snapshot)}
+      {:error, :not_found} -> {:error, "Run not found: #{run_id}"}
+      {:error, reason} -> {:error, "Failed to load run status: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["task-list", run_id]) do
+    case Beamwarden.RunServer.task_list(run_id) do
+      tasks when is_list(tasks) and tasks != [] and is_map(hd(tasks)) ->
+        {:ok, render_task_list(run_id, normalize_tasks(tasks))}
+
+      tasks when is_list(tasks) ->
+        {:ok, render_task_list(run_id, tasks)}
+
+      {:error, :not_found} ->
+        {:error, "Run not found: #{run_id}"}
+
+      {:error, reason} ->
+        {:error, "Failed to load tasks: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["worker-list"]) do
+    {:ok, render_worker_list(Beamwarden.RunServer.all_worker_snapshots())}
+  end
+
   def run_local(["daemon-status"]) do
     {:ok, Beamwarden.Daemon.status_report()}
   end
@@ -517,5 +562,74 @@ defmodule Beamwarden.CLI do
     ]
     |> Enum.join("
 ")
+  end
+
+  defp render_run_snapshot(snapshot) do
+    counts =
+      normalize_task_counts(Map.get(snapshot, :task_counts) || Map.get(snapshot, "task_counts"))
+
+    [
+      "# Orchestration Run",
+      "",
+      "run_id=#{Map.get(snapshot, :run_id) || Map.get(snapshot, "run_id")}",
+      "status=#{Map.get(snapshot, :status) || Map.get(snapshot, "status")}",
+      "worker_count=#{Map.get(snapshot, :worker_count) || Map.get(snapshot, "worker_count")}",
+      "tasks_pending=#{counts.pending}",
+      "tasks_running=#{counts.running}",
+      "tasks_completed=#{counts.completed}",
+      "tasks_failed=#{counts.failed}",
+      "prompt=#{Map.get(snapshot, :prompt) || Map.get(snapshot, "prompt")}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp render_task_list(run_id, tasks) do
+    [
+      "# Run Tasks",
+      "",
+      "run_id=#{run_id}",
+      Enum.map(tasks, fn task ->
+        "[#{task.status}] #{task.id} worker=#{task.assigned_worker || "none"} — #{task.title}"
+      end)
+    ]
+    |> List.flatten()
+    |> Enum.join("\n")
+  end
+
+  defp render_worker_list([]), do: "# Workers\n\nNo active orchestration workers"
+
+  defp render_worker_list(workers) do
+    [
+      "# Workers",
+      "",
+      Enum.map(workers, fn worker ->
+        "worker=#{worker.worker_id} run_id=#{worker.run_id} state=#{worker.state} current_task=#{worker.current_task_id || "none"}"
+      end)
+    ]
+    |> List.flatten()
+    |> Enum.join("\n")
+  end
+
+  defp maybe_put_option(opts, _key, nil), do: opts
+  defp maybe_put_option(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp normalize_task_counts(%{} = counts) do
+    %{
+      pending: counts[:pending] || counts["pending"] || 0,
+      running: counts[:running] || counts["running"] || 0,
+      completed: counts[:completed] || counts["completed"] || 0,
+      failed: counts[:failed] || counts["failed"] || 0
+    }
+  end
+
+  defp normalize_tasks(tasks) do
+    Enum.map(tasks, fn task ->
+      %{
+        id: task[:id] || task["id"],
+        status: task[:status] || task["status"],
+        assigned_worker: task[:assigned_worker] || task["assigned_worker"],
+        title: task[:title] || task["title"]
+      }
+    end)
   end
 end

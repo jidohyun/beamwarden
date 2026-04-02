@@ -195,7 +195,11 @@ defmodule Beamwarden.Daemon do
           "workflow-add-step",
           "workflow-complete-step",
           "workflow-status",
-          "advance-task"
+          "advance-task",
+          "run",
+          "run-status",
+          "task-list",
+          "worker-list"
         ]
 
       _ ->

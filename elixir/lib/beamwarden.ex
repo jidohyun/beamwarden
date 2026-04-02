@@ -41,6 +41,10 @@ defmodule Beamwarden do
     Path.join(session_root(), "workflows")
   end
 
+  def run_root do
+    Path.join(session_root(), "runs")
+  end
+
   def cluster_root do
     Path.join(session_root(), "cluster")
   end
@@ -83,5 +87,9 @@ defmodule Beamwarden do
 
   def workflow_path(workflow_id) do
     Path.join(workflow_root(), "#{workflow_id}.json")
+  end
+
+  def run_path(run_id) do
+    Path.join(run_root(), "#{run_id}.json")
   end
 end

@@ -135,28 +135,36 @@ defmodule Beamwarden.CLI do
   end
 
   def run_local(["logs", run_id | rest]) do
-    {opts, _, _} = OptionParser.parse(rest, strict: [follow: :boolean])
+    {opts, _, _} =
+      OptionParser.parse(rest,
+        strict: [follow: :boolean, follow_interval_ms: :integer, follow_timeout_ms: :integer]
+      )
 
-    case Beamwarden.Orchestrator.logs(run_id) do
-      {:ok, report} ->
-        output =
-          Beamwarden.Orchestrator.render_logs(report) <>
-            if(opts[:follow],
-              do:
-                if(Beamwarden.Orchestrator.logs(run_id) |> elem(1) |> Map.get(:follow_supported),
-                  do: "\nfollow=requested_runtime_snapshot_replayed_once",
-                  else: "\nfollow=requested_persisted_snapshot_replayed_once"
-                ),
-              else: ""
-            )
+    if opts[:follow] do
+      case Beamwarden.Orchestrator.follow_logs(run_id, &IO.puts/1,
+             interval_ms: opts[:follow_interval_ms] || 50,
+             timeout_ms: opts[:follow_timeout_ms] || 5_000
+           ) do
+        :ok ->
+          {:ok, ""}
 
-        {:ok, output}
+        {:error, :not_found} ->
+          {:error, "Run not found: #{run_id}"}
 
-      {:error, :not_found} ->
-        {:error, "Run not found: #{run_id}"}
+        {:error, reason} ->
+          {:error, "Failed to follow logs: #{inspect(reason)}"}
+      end
+    else
+      case Beamwarden.Orchestrator.logs(run_id) do
+        {:ok, events} ->
+          {:ok, Beamwarden.Orchestrator.render_logs(run_id, events)}
 
-      {:error, reason} ->
-        {:error, "Failed to load logs: #{inspect(reason)}"}
+        {:error, :not_found} ->
+          {:error, "Run not found: #{run_id}"}
+
+        {:error, reason} ->
+          {:error, "Failed to load logs: #{inspect(reason)}"}
+      end
     end
   end
 
@@ -168,6 +176,16 @@ defmodule Beamwarden.CLI do
 
   def run_local(["worker-list"]) do
     {:ok, Beamwarden.Orchestrator.worker_list() |> Beamwarden.Orchestrator.render_workers()}
+  end
+
+  def run_local(["cleanup-state" | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [older_than_seconds: :integer])
+
+    {:ok,
+     opts
+     |> Enum.into([])
+     |> Beamwarden.Orchestrator.cleanup_state()
+     |> Beamwarden.Orchestrator.render_cleanup()}
   end
 
   def run_local(["session-start", session_id]) do

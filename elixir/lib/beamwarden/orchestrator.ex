@@ -38,7 +38,10 @@ defmodule Beamwarden.Orchestrator do
         {:ok, Beamwarden.RunServer.snapshot(run_id)}
 
       true ->
-        Beamwarden.RunStore.load(run_id)
+        case Beamwarden.RunStore.load(run_id) do
+          {:ok, snapshot} -> {:ok, normalize_persisted_snapshot(snapshot)}
+          error -> error
+        end
     end
   end
 
@@ -199,8 +202,21 @@ defmodule Beamwarden.Orchestrator do
     end
   end
 
+  def follow_logs(run_id, sink, opts \\ []) when is_function(sink, 1) do
+    with {:ok, snapshot} <- run_snapshot(run_id),
+         {:ok, events} <- Beamwarden.EventStore.list(run_id) do
+      sink.(render_logs(run_id, events))
+      sink.("follow=streaming")
+      do_follow_logs(run_id, length(events), sink, snapshot, opts)
+    end
+  end
+
   def worker_list(opts \\ []) do
     Beamwarden.WorkerSupervisor.list_workers(opts)
+  end
+
+  def cleanup_state(opts \\ []) do
+    Beamwarden.OrchestratorRetention.cleanup(opts)
   end
 
   def render_run(snapshot) do
@@ -208,16 +224,24 @@ defmodule Beamwarden.Orchestrator do
       "Run Snapshot",
       "",
       "run_id=#{value(snapshot, :run_id)}",
+      "presence=#{value(snapshot, :presence) || "unknown"}",
       "status=#{value(snapshot, :status)}",
       "lifecycle=#{value(snapshot, :lifecycle) || "active"}",
       "task_count=#{value(snapshot, :task_count)}",
       "completed_count=#{value(snapshot, :completed_count)}",
       "failed_count=#{value(snapshot, :failed_count)}",
+      "cancelling_count=#{value(snapshot, :cancelling_count) || 0}",
       "cancelled_count=#{value(snapshot, :cancelled_count) || 0}",
       "worker_count=#{length(value(snapshot, :worker_ids) || [])}",
+      maybe_text("lifecycle", value(snapshot, :lifecycle)),
+      maybe_text("stale_runtime", if(truthy?(snapshot, :stale_runtime), do: "true")),
+      maybe_text("stale_reason", value(snapshot, :stale_reason)),
       "updated_at=#{value(snapshot, :updated_at)}",
+      maybe_text("finished_at", value(snapshot, :finished_at)),
+      maybe_text("cancellation_requested_at", value(snapshot, :cancellation_requested_at)),
       "prompt=#{value(snapshot, :prompt)}"
     ]
+    |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 
@@ -283,13 +307,10 @@ defmodule Beamwarden.Orchestrator do
     [
       "Run Logs",
       "",
-      "run_id=#{value(report, :run_id)}",
-      "run_status=#{value(report, :run_status)}",
-      "run_lifecycle=#{value(report, :run_lifecycle)}",
-      "event_source=#{value(report, :source)}",
-      "follow_supported=#{value(report, :follow_supported)}",
-      "event_count=#{length(value(report, :events) || [])}",
-      if((value(report, :events) || []) == [],
+      "run_id=#{run_id}",
+      "source=persisted_events",
+      "event_count=#{length(events)}",
+      if(events == [],
         do: "none",
         else:
           Enum.map(value(report, :events) || [], fn event ->
@@ -301,10 +322,27 @@ defmodule Beamwarden.Orchestrator do
     |> Enum.join("\n")
   end
 
+  def render_cleanup(summary) do
+    [
+      "Cleanup Summary",
+      "",
+      "older_than_seconds=#{value(summary, :older_than_seconds)}",
+      "runs_deleted=#{value(summary, :runs_deleted) || 0}",
+      "workers_deleted=#{value(summary, :workers_deleted) || 0}",
+      "events_deleted=#{value(summary, :events_deleted) || 0}",
+      "run_ids_removed=#{Enum.join(value(summary, :run_ids_removed) || [], ",")}",
+      "worker_ids_removed=#{Enum.join(value(summary, :worker_ids_removed) || [], ",")}",
+      "event_run_ids_removed=#{Enum.join(value(summary, :event_run_ids_removed) || [], ",")}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  def render_event(event), do: format_event(event)
+
   defp await_until(run_id, deadline) do
     case run_snapshot(run_id) do
       {:ok, snapshot} ->
-        if value(snapshot, :status) in ["completed", "failed"] or
+        if value(snapshot, :status) in ["completed", "failed", "cancelled"] or
              System.monotonic_time(:millisecond) >= deadline do
           {:ok, snapshot}
         else
@@ -322,21 +360,52 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_text(label, value), do: "#{label}=#{value}"
   defp truthy?(map, key), do: value(map, key) in [true, "true"]
 
-  defp older_than?(nil, _cutoff), do: false
+  defp do_follow_logs(run_id, seen_count, sink, snapshot, opts) do
+    interval_ms = Keyword.get(opts, :interval_ms, 50)
+    timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
+    started_at = Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
 
-  defp older_than?(%DateTime{} = datetime, %DateTime{} = cutoff) do
-    DateTime.compare(datetime, cutoff) in [:lt, :eq]
-  end
+    cond do
+      value(snapshot, :status) in ["completed", "failed", "cancelled"] ->
+        sink.("follow=complete status=#{value(snapshot, :status)}")
+        :ok
 
-  defp older_than?(timestamp, %DateTime{} = cutoff) when is_binary(timestamp) do
-    case DateTime.from_iso8601(timestamp) do
-      {:ok, datetime, _offset} -> older_than?(datetime, cutoff)
-      _ -> false
+      System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
+        sink.("follow=timeout status=#{value(snapshot, :status)}")
+        :ok
+
+      true ->
+        Process.sleep(interval_ms)
+        {:ok, events} = Beamwarden.EventStore.list(run_id)
+
+        events
+        |> Enum.drop(seen_count)
+        |> Enum.each(&(sink.(render_event(&1))))
+
+        {:ok, latest_snapshot} = run_snapshot(run_id)
+
+        do_follow_logs(run_id, length(events), sink, latest_snapshot,
+          interval_ms: interval_ms,
+          timeout_ms: timeout_ms,
+          started_at: started_at
+        )
     end
   end
 
-  defp run_exists?(run_id) do
-    File.exists?(Beamwarden.run_path(run_id))
+  defp normalize_persisted_snapshot(snapshot) do
+    snapshot
+    |> Map.put_new("presence", "persisted")
+    |> maybe_mark_stale_runtime()
+  end
+
+  defp maybe_mark_stale_runtime(snapshot) do
+    if value(snapshot, :status) in ["pending", "running", "cancelling"] do
+      snapshot
+      |> Map.put("stale_runtime", true)
+      |> Map.put_new("stale_reason", "run_server_not_registered")
+    else
+      snapshot
+    end
   end
 
   defp persisted_state_text(worker) do

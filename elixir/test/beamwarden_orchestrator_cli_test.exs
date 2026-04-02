@@ -48,30 +48,7 @@ defmodule BeamwardenOrchestratorCliTest do
     assert worker_output =~ "run_id=#{run_id}"
   end
 
-  test "logs --follow makes the replay-only follow semantics explicit" do
-    run_id = unique_id("phase-2-follow")
-
-    assert {:ok, failed_snapshot} =
-             Beamwarden.Orchestrator.start_run("review this repo",
-               run_id: run_id,
-               workers: 1,
-               await_timeout: 1_500,
-               worker_opts: [command: "printf 'boom' >&2; exit 2"]
-             )
-
-    assert failed_snapshot.status == "failed"
-
-    logs_output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["logs", run_id, "--follow"])
-      end)
-
-    assert logs_output =~ "Run Logs"
-    assert logs_output =~ "run_id=#{run_id}"
-    assert logs_output =~ "follow=requested_runtime_snapshot_replayed_once"
-  end
-
-  test "cancel-run, retry-task, logs, and persisted worker reporting expose phase 2 lifecycle data" do
+  test "cancel-run, retry-task, logs, and persisted worker reporting expose richer lifecycle data" do
     run_id = unique_id("phase-2-run")
     parent = self()
 
@@ -106,8 +83,9 @@ defmodule BeamwardenOrchestratorCliTest do
         assert 0 == Beamwarden.CLI.main(["cancel-run", run_id])
       end)
 
-    assert cancel_output =~ "status=cancelled"
-    assert cancel_output =~ "cancelled_count=1"
+    assert cancel_output =~ "status=cancelling"
+    assert cancel_output =~ "cancelling_count=1"
+    assert cancel_output =~ "lifecycle=cancel_requested"
 
     assert {:ok, worker_pid} = Beamwarden.WorkerSupervisor.worker_pid(worker_id)
     send(worker_pid, {:release_attempt, 1})
@@ -139,9 +117,11 @@ defmodule BeamwardenOrchestratorCliTest do
         assert 0 == Beamwarden.CLI.main(["logs", run_id])
       end)
 
+    assert logs_output =~ "run_cancel_requested"
+    assert logs_output =~ "task_cancel_requested"
+    assert logs_output =~ "task_cancelled"
     assert logs_output =~ "run_cancelled"
     assert logs_output =~ "task_retried"
-    assert logs_output =~ "worker_result_ignored"
     assert logs_output =~ "task_completed"
 
     GenServer.stop(worker_pid, :normal)

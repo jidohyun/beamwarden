@@ -83,6 +83,48 @@ defmodule Beamwarden.TaskScheduler do
     {updated, cancelled_count}
   end
 
+  def request_cancel(tasks) do
+    now = now()
+
+    Enum.map_reduce(tasks, %{requested: 0, cancelled: 0}, fn task, counts ->
+      case value(task, :status) do
+        "pending" ->
+          {
+            normalize(task)
+            |> put(:status, "cancelled")
+            |> put(:result_summary, nil)
+            |> put(:error, nil)
+            |> put(:updated_at, now),
+            %{counts | cancelled: counts.cancelled + 1}
+          }
+
+        "in_progress" ->
+          {
+            normalize(task)
+            |> put(:status, "cancel_requested")
+            |> put(:result_summary, nil)
+            |> put(:error, nil)
+            |> put(:updated_at, now),
+            %{counts | requested: counts.requested + 1}
+          }
+
+        _other ->
+          {normalize(task), counts}
+      end
+    end)
+  end
+
+  def finalize_cancelled_task(tasks, task_id, worker_id) do
+    update_task(tasks, task_id, fn task ->
+      task
+      |> put(:status, "cancelled")
+      |> put(:assigned_worker, worker_id)
+      |> put(:result_summary, nil)
+      |> put(:error, nil)
+      |> put(:updated_at, now())
+    end)
+  end
+
   def retry_task(tasks, task_id) do
     case Enum.find(tasks, &(value(&1, :task_id) == task_id)) do
       nil ->
@@ -116,7 +158,10 @@ defmodule Beamwarden.TaskScheduler do
 
     cond do
       tasks == [] ->
-        if lifecycle == :cancelled, do: "cancelled", else: "pending"
+        if lifecycle in [:cancel_requested, :cancelled], do: "cancelled", else: "pending"
+
+      lifecycle == :cancel_requested or Enum.any?(tasks, &(value(&1, :status) == "cancel_requested")) ->
+        "cancelling"
 
       lifecycle == :cancelled and terminal?(tasks) ->
         "cancelled"
@@ -143,6 +188,7 @@ defmodule Beamwarden.TaskScheduler do
       task_count: length(tasks),
       pending_count: Enum.count(tasks, &(value(&1, :status) == "pending")),
       running_count: Enum.count(tasks, &(value(&1, :status) == "in_progress")),
+      cancelling_count: Enum.count(tasks, &(value(&1, :status) == "cancel_requested")),
       completed_count: Enum.count(tasks, &(value(&1, :status) == "completed")),
       failed_count: Enum.count(tasks, &(value(&1, :status) == "failed")),
       cancelled_count: Enum.count(tasks, &(value(&1, :status) == "cancelled"))

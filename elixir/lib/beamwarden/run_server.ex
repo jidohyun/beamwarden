@@ -10,6 +10,8 @@ defmodule Beamwarden.RunServer do
     :prompt,
     :created_at,
     :updated_at,
+    :finished_at,
+    :cancellation_requested_at,
     :worker_opts,
     :lifecycle,
     :last_status,
@@ -105,16 +107,46 @@ defmodule Beamwarden.RunServer do
 
   @impl true
   def handle_call(:cancel_run, _from, %__MODULE__{} = state) do
-    {tasks, cancelled_count} = TaskScheduler.cancel_running_tasks(state.tasks)
+    {tasks, %{requested: requested_count, cancelled: cancelled_count}} =
+      TaskScheduler.request_cancel(state.tasks)
 
-    if cancelled_count == 0 do
+    if requested_count == 0 and cancelled_count == 0 do
       {:reply, {:error, :not_cancelable}, state}
     else
+      requested_at = now()
+
+      log_event(state.run_id, %{type: "run_cancel_requested"})
+
+      Enum.each(tasks, fn task ->
+        case value(task, :status) do
+          "cancel_requested" ->
+            log_event(state.run_id, %{
+              type: "task_cancel_requested",
+              task_id: value(task, :task_id),
+              worker_id: value(task, :assigned_worker),
+              attempt: value(task, :attempt) || 1
+            })
+
+          "cancelled" ->
+            log_event(state.run_id, %{
+              type: "task_cancelled",
+              task_id: value(task, :task_id),
+              worker_id: value(task, :assigned_worker),
+              attempt: value(task, :attempt) || 1,
+              reason: "cancelled_before_execution"
+            })
+
+          _ ->
+            :ok
+        end
+      end)
+
       next_state =
         state
         |> Map.put(:tasks, tasks)
-        |> Map.put(:lifecycle, :cancelled)
-        |> Map.put(:updated_at, now())
+        |> Map.put(:lifecycle, if(requested_count > 0, do: :cancel_requested, else: :cancelled))
+        |> Map.put(:cancellation_requested_at, requested_at)
+        |> Map.put(:updated_at, requested_at)
         |> persist()
 
       {:reply, {:ok, snapshot_map(next_state)}, next_state}
@@ -135,6 +167,8 @@ defmodule Beamwarden.RunServer do
           state
           |> Map.put(:tasks, tasks)
           |> Map.put(:lifecycle, :active)
+          |> Map.put(:finished_at, nil)
+          |> Map.put(:cancellation_requested_at, nil)
           |> Map.put(:updated_at, now())
           |> persist()
 
@@ -156,28 +190,32 @@ defmodule Beamwarden.RunServer do
   @impl true
   def handle_info(:dispatch, %__MODULE__{} = state) do
     {tasks, assigned?} =
-      Beamwarden.WorkerSupervisor.list_live_workers(run_id: state.run_id)
-      |> Enum.filter(&(value(&1, :state) == "idle"))
-      |> Enum.reduce({state.tasks, false}, fn worker, {tasks, assigned?} ->
-        worker_id = value(worker, :worker_id)
+      if state.lifecycle == :active do
+        Beamwarden.WorkerSupervisor.list_live_workers(run_id: state.run_id)
+        |> Enum.filter(&(value(&1, :state) == "idle"))
+        |> Enum.reduce({state.tasks, false}, fn worker, {tasks, assigned?} ->
+          worker_id = value(worker, :worker_id)
 
-        case TaskScheduler.assign_next_task(tasks, worker_id) do
-          {:ok, task, updated_tasks} ->
-            Beamwarden.ExternalWorker.assign(worker_id, task)
+          case TaskScheduler.assign_next_task(tasks, worker_id) do
+            {:ok, task, updated_tasks} ->
+              Beamwarden.ExternalWorker.assign(worker_id, task)
 
-            log_event(state.run_id, %{
-              type: "task_assigned",
-              task_id: value(task, :task_id),
-              worker_id: worker_id,
-              attempt: value(task, :attempt) || 1
-            })
+              log_event(state.run_id, %{
+                type: "task_assigned",
+                task_id: value(task, :task_id),
+                worker_id: worker_id,
+                attempt: value(task, :attempt) || 1
+              })
 
-            {updated_tasks, true}
+              {updated_tasks, true}
 
-          :none ->
-            {tasks, assigned?}
-        end
-      end)
+            :none ->
+              {tasks, assigned?}
+          end
+        end)
+      else
+        {state.tasks, false}
+      end
 
     next_state =
       if assigned? do
@@ -193,10 +231,12 @@ defmodule Beamwarden.RunServer do
   end
 
   defp persist(%__MODULE__{} = state) do
+    state = normalize_lifecycle(state)
     snapshot = snapshot_map(state)
     Beamwarden.RunStore.save(snapshot)
     maybe_log_run_transition(state.last_status, value(snapshot, :status), snapshot)
-    %{state | updated_at: value(snapshot, :updated_at), last_status: value(snapshot, :status)}
+
+    %{state | updated_at: value(snapshot, :updated_at), finished_at: value(snapshot, :finished_at), last_status: value(snapshot, :status)}
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
@@ -208,14 +248,18 @@ defmodule Beamwarden.RunServer do
       status:
         TaskScheduler.status(state.tasks, length(state.worker_ids), lifecycle: state.lifecycle),
       lifecycle: Atom.to_string(state.lifecycle || :active),
+      presence: "active",
       created_at: state.created_at,
       updated_at: state.updated_at || now(),
+      finished_at: state.finished_at,
+      cancellation_requested_at: state.cancellation_requested_at,
       task_ids: Enum.map(state.tasks, &value(&1, :task_id)),
       worker_ids: state.worker_ids,
       tasks: Enum.map(state.tasks, &normalize_task/1),
       task_count: counts.task_count,
       pending_count: counts.pending_count,
       running_count: counts.running_count,
+      cancelling_count: counts.cancelling_count,
       completed_count: counts.completed_count,
       failed_count: counts.failed_count,
       cancelled_count: counts.cancelled_count
@@ -244,18 +288,7 @@ defmodule Beamwarden.RunServer do
   defp handle_worker_result(%__MODULE__{} = state, worker_id, task_id, attempt, {:ok, summary}) do
     with {:ok, task} <- fetch_current_task(state.tasks, task_id),
          :ok <- ensure_current_attempt(task, attempt) do
-      log_event(state.run_id, %{
-        type: "task_completed",
-        task_id: task_id,
-        worker_id: worker_id,
-        attempt: attempt,
-        summary: blank_to_nil(summary)
-      })
-
-      state
-      |> Map.put(:tasks, TaskScheduler.complete_task(state.tasks, task_id, worker_id, summary))
-      |> Map.put(:updated_at, now())
-      |> persist()
+      complete_or_cancel_task(state, task, worker_id, attempt, {:ok, summary})
     else
       {:error, reason} ->
         log_ignored_result(state.run_id, worker_id, task_id, attempt, :ok, reason)
@@ -266,18 +299,7 @@ defmodule Beamwarden.RunServer do
   defp handle_worker_result(%__MODULE__{} = state, worker_id, task_id, attempt, {:error, error}) do
     with {:ok, task} <- fetch_current_task(state.tasks, task_id),
          :ok <- ensure_current_attempt(task, attempt) do
-      log_event(state.run_id, %{
-        type: "task_failed",
-        task_id: task_id,
-        worker_id: worker_id,
-        attempt: attempt,
-        error: blank_to_nil(error) || "worker failed"
-      })
-
-      state
-      |> Map.put(:tasks, TaskScheduler.fail_task(state.tasks, task_id, worker_id, error))
-      |> Map.put(:updated_at, now())
-      |> persist()
+      complete_or_cancel_task(state, task, worker_id, attempt, {:error, error})
     else
       {:error, reason} ->
         log_ignored_result(state.run_id, worker_id, task_id, attempt, :error, reason)
@@ -294,10 +316,73 @@ defmodule Beamwarden.RunServer do
 
   defp ensure_current_attempt(task, attempt) do
     cond do
-      value(task, :status) != "in_progress" -> {:error, :stale_status}
+      value(task, :status) not in ["in_progress", "cancel_requested"] -> {:error, :stale_status}
       (value(task, :attempt) || 1) != attempt -> {:error, :stale_attempt}
       true -> :ok
     end
+  end
+
+  defp complete_or_cancel_task(state, task, worker_id, attempt, result) do
+    case value(task, :status) do
+      "cancel_requested" ->
+        reason =
+          case result do
+            {:ok, _summary} -> "worker_completed_after_cancel_request"
+            {:error, _error} -> "worker_failed_after_cancel_request"
+          end
+
+        log_event(state.run_id, %{
+          type: "task_cancelled",
+          task_id: value(task, :task_id),
+          worker_id: worker_id,
+          attempt: attempt,
+          reason: reason
+        })
+
+        state
+        |> Map.put(
+          :tasks,
+          TaskScheduler.finalize_cancelled_task(state.tasks, value(task, :task_id), worker_id)
+        )
+        |> Map.put(:updated_at, now())
+        |> persist()
+
+      "in_progress" ->
+        persist_completed_or_failed_task(state, task, worker_id, attempt, result)
+    end
+  end
+
+  defp persist_completed_or_failed_task(state, task, worker_id, attempt, {:ok, summary}) do
+    log_event(state.run_id, %{
+      type: "task_completed",
+      task_id: value(task, :task_id),
+      worker_id: worker_id,
+      attempt: attempt,
+      summary: blank_to_nil(summary)
+    })
+
+    state
+    |> Map.put(
+      :tasks,
+      TaskScheduler.complete_task(state.tasks, value(task, :task_id), worker_id, summary)
+    )
+    |> Map.put(:updated_at, now())
+    |> persist()
+  end
+
+  defp persist_completed_or_failed_task(state, task, worker_id, attempt, {:error, error}) do
+    log_event(state.run_id, %{
+      type: "task_failed",
+      task_id: value(task, :task_id),
+      worker_id: worker_id,
+      attempt: attempt,
+      error: blank_to_nil(error) || "worker failed"
+    })
+
+    state
+    |> Map.put(:tasks, TaskScheduler.fail_task(state.tasks, value(task, :task_id), worker_id, error))
+    |> Map.put(:updated_at, now())
+    |> persist()
   end
 
   defp log_task_created(run_id, task) do
@@ -310,7 +395,7 @@ defmodule Beamwarden.RunServer do
   end
 
   defp maybe_log_run_transition(previous, current, _snapshot)
-       when previous == current or current in ["pending", "running"] do
+       when previous == current or current in ["pending", "running", "cancelling"] do
     :ok
   end
 
@@ -339,6 +424,22 @@ defmodule Beamwarden.RunServer do
       failed_count: value(snapshot, :failed_count),
       cancelled_count: value(snapshot, :cancelled_count)
     })
+  end
+
+  defp normalize_lifecycle(%__MODULE__{} = state) do
+    counts = TaskScheduler.counts(state.tasks)
+    status = TaskScheduler.status(state.tasks, length(state.worker_ids), lifecycle: state.lifecycle)
+
+    cond do
+      state.lifecycle == :cancel_requested and counts.cancelling_count == 0 ->
+        %{state | lifecycle: :cancelled, finished_at: state.finished_at || state.updated_at || now()}
+
+      status in ["completed", "failed", "cancelled"] ->
+        %{state | finished_at: state.finished_at || state.updated_at || now()}
+
+      true ->
+        %{state | finished_at: nil}
+    end
   end
 
   defp log_ignored_result(run_id, worker_id, task_id, attempt, result, reason) do

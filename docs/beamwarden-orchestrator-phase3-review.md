@@ -71,7 +71,7 @@ Use these questions when reviewing a Phase 3 implementation:
 1. Can an operator tell the difference between a live worker, a stale worker snapshot, and an expired worker lease?
 2. If a task is requeued after expiry, does `logs <run-id>` explain why?
 3. Can cleanup delete the history of a run that is still active or still being recovered?
-4. Does `logs --follow` clearly differentiate persisted replay from any future live tail mode?
+4. Does `logs --follow` clearly differentiate replay-only output from any future live tail mode, including the active-run vs persisted-run labels?
 5. After a restart, does Beamwarden restore the minimum useful state without inventing liveness it cannot prove?
 
 ## Documentation update rules

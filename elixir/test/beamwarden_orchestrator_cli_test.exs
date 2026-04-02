@@ -48,7 +48,7 @@ defmodule BeamwardenOrchestratorCliTest do
     assert worker_output =~ "run_id=#{run_id}"
   end
 
-  test "logs --follow makes the persisted-only follow semantics explicit" do
+  test "logs --follow makes the replay-only follow semantics explicit" do
     run_id = unique_id("phase-2-follow")
 
     assert {:ok, failed_snapshot} =
@@ -68,7 +68,7 @@ defmodule BeamwardenOrchestratorCliTest do
 
     assert logs_output =~ "Run Logs"
     assert logs_output =~ "run_id=#{run_id}"
-    assert logs_output =~ "follow=not_implemented_showing_persisted_events_only"
+    assert logs_output =~ "follow=requested_runtime_snapshot_replayed_once"
   end
 
   test "cancel-run, retry-task, logs, and persisted worker reporting expose phase 2 lifecycle data" do

@@ -1,20 +1,15 @@
 defmodule Beamwarden.TaskScheduler do
   @moduledoc false
 
-  @terminal_statuses ["completed", "failed"]
+  def build_initial_tasks(run_id, prompt) do
+    now = now()
 
-  def initial_tasks(run_id, prompt) do
-    prompt
-    |> split_prompt()
-    |> Enum.with_index(1)
-    |> Enum.map(fn {payload, index} ->
-      now = timestamp()
-
+    [
       %{
-        task_id: Integer.to_string(index),
+        task_id: "#{run_id}-task-1",
         run_id: run_id,
-        title: task_title(payload, index),
-        payload: payload,
+        title: summarize_prompt(prompt),
+        payload: prompt,
         status: "pending",
         assigned_worker: nil,
         result_summary: nil,
@@ -22,110 +17,122 @@ defmodule Beamwarden.TaskScheduler do
         created_at: now,
         updated_at: now
       }
-    end)
+    ]
   end
 
   def assign_next_task(tasks, worker_id) do
-    case Enum.find_index(tasks, &(&1.status == "pending")) do
+    case Enum.find(tasks, &(value(&1, :status) == "pending")) do
       nil ->
-        {:none, tasks}
+        :none
 
-      index ->
-        task = Enum.at(tasks, index)
-        now = timestamp()
+      task ->
+        updated =
+          update_task(tasks, value(task, :task_id), fn current ->
+            current
+            |> put(:status, "in_progress")
+            |> put(:assigned_worker, worker_id)
+            |> put(:updated_at, now())
+          end)
 
-        assigned = %{
-          task
-          | status: "running",
-            assigned_worker: worker_id,
-            updated_at: now,
-            error: nil
-        }
-
-        {assigned, List.replace_at(tasks, index, assigned)}
+        {:ok, normalize(task) |> put(:status, "in_progress") |> put(:assigned_worker, worker_id),
+         updated}
     end
   end
 
-  def finish_task(tasks, task_id, worker_id, {:ok, result_summary}) do
+  def complete_task(tasks, task_id, worker_id, summary) do
     update_task(tasks, task_id, fn task ->
-      %{
-        task
-        | status: "completed",
-          assigned_worker: worker_id,
-          result_summary: result_summary,
-          error: nil,
-          updated_at: timestamp()
-      }
+      task
+      |> put(:status, "completed")
+      |> put(:assigned_worker, worker_id)
+      |> put(:result_summary, blank_to_nil(summary))
+      |> put(:error, nil)
+      |> put(:updated_at, now())
     end)
   end
 
-  def finish_task(tasks, task_id, worker_id, {:error, error}) do
+  def fail_task(tasks, task_id, worker_id, error) do
     update_task(tasks, task_id, fn task ->
-      %{
-        task
-        | status: "failed",
-          assigned_worker: worker_id,
-          result_summary: nil,
-          error: error,
-          updated_at: timestamp()
-      }
+      task
+      |> put(:status, "failed")
+      |> put(:assigned_worker, worker_id)
+      |> put(:error, blank_to_nil(error) || "worker failed")
+      |> put(:updated_at, now())
     end)
+  end
+
+  def status(tasks, worker_count) do
+    cond do
+      tasks == [] ->
+        "pending"
+
+      Enum.any?(tasks, &(value(&1, :status) == "failed")) and terminal?(tasks) ->
+        "failed"
+
+      terminal?(tasks) ->
+        "completed"
+
+      Enum.any?(tasks, &(value(&1, :status) == "in_progress")) ->
+        "running"
+
+      worker_count == 0 ->
+        "pending"
+
+      true ->
+        "running"
+    end
   end
 
   def counts(tasks) do
-    grouped = Enum.frequencies_by(tasks, & &1.status)
-
     %{
       task_count: length(tasks),
-      pending_count: Map.get(grouped, "pending", 0),
-      running_count: Map.get(grouped, "running", 0),
-      completed_count: Map.get(grouped, "completed", 0),
-      failed_count: Map.get(grouped, "failed", 0)
+      pending_count: Enum.count(tasks, &(value(&1, :status) == "pending")),
+      running_count: Enum.count(tasks, &(value(&1, :status) == "in_progress")),
+      completed_count: Enum.count(tasks, &(value(&1, :status) == "completed")),
+      failed_count: Enum.count(tasks, &(value(&1, :status) == "failed"))
     }
   end
 
   def terminal?(tasks) do
-    Enum.all?(tasks, &(&1.status in @terminal_statuses))
-  end
-
-  def run_status(tasks) do
-    counts = counts(tasks)
-
-    cond do
-      counts.task_count == 0 -> "completed"
-      counts.running_count > 0 -> "running"
-      counts.pending_count > 0 -> "running"
-      counts.failed_count > 0 -> "failed"
-      true -> "completed"
-    end
-  end
-
-  defp split_prompt(prompt) do
-    prompt
-    |> String.split(~r/\s*\|\|\s*|\r?\n+/, trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> case do
-      [] -> [String.trim(prompt)]
-      items -> items
-    end
-  end
-
-  defp task_title(payload, index) do
-    case payload |> String.trim() |> String.split(~r/\s+/, trim: true) |> Enum.take(6) do
-      [] -> "Task #{index}"
-      words -> Enum.join(words, " ")
-    end
+    tasks != [] and Enum.all?(tasks, &(value(&1, :status) in ["completed", "failed"]))
   end
 
   defp update_task(tasks, task_id, updater) do
-    case Enum.find_index(tasks, &(&1.task_id == task_id)) do
-      nil -> tasks
-      index -> List.update_at(tasks, index, updater)
-    end
+    Enum.map(tasks, fn task ->
+      if value(task, :task_id) == task_id, do: updater.(normalize(task)), else: normalize(task)
+    end)
   end
 
-  defp timestamp do
+  defp summarize_prompt(prompt) do
+    prompt
+    |> String.trim()
+    |> String.replace(~r/\s+/u, " ")
+    |> String.slice(0, 72)
+  end
+
+  defp now do
     DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   end
+
+  defp normalize(task) do
+    %{
+      task_id: value(task, :task_id),
+      run_id: value(task, :run_id),
+      title: value(task, :title),
+      payload: value(task, :payload),
+      status: value(task, :status),
+      assigned_worker: value(task, :assigned_worker),
+      result_summary: value(task, :result_summary),
+      error: value(task, :error),
+      created_at: value(task, :created_at),
+      updated_at: value(task, :updated_at)
+    }
+  end
+
+  defp put(map, key, value), do: Map.put(map, key, value)
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+
+  defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 end

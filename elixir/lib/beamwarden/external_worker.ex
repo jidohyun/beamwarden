@@ -6,15 +6,13 @@ defmodule Beamwarden.ExternalWorker do
   defstruct [
     :worker_id,
     :run_id,
-    :run_pid,
+    :command,
+    :executor,
     :current_task_id,
-    :runner_ref,
-    :runner_pid,
+    :last_result_summary,
     :started_at,
     :heartbeat_at,
     :last_event_at,
-    :last_result_summary,
-    :last_exit_status,
     state: "idle"
   ]
 
@@ -33,71 +31,48 @@ defmodule Beamwarden.ExternalWorker do
     GenServer.start_link(__MODULE__, opts, name: via(worker_id))
   end
 
-  def run_task(worker_id, task) do
-    GenServer.cast(via(worker_id), {:run_task, task})
+  def assign(worker_id, task) do
+    GenServer.cast(via(worker_id), {:assign, task})
   end
 
   def snapshot(worker_id) do
     GenServer.call(via(worker_id), :snapshot)
   end
 
-  def list_workers do
-    Beamwarden.WorkerRegistry
-    |> Registry.select([{{:"$1", :_, :_}, [], [:"$1"]}])
-    |> Enum.map(&snapshot/1)
-    |> Enum.sort_by(&{&1.run_id, &1.worker_id})
-  end
-
-  def stop(worker_id) do
-    case Registry.lookup(Beamwarden.WorkerRegistry, worker_id) do
-      [{pid, _value}] -> GenServer.stop(pid, :normal)
-      [] -> :ok
-    end
-  end
-
   @impl true
   def init(opts) do
-    now = timestamp()
+    now = now()
 
-    {:ok,
-     %__MODULE__{
-       worker_id: Keyword.fetch!(opts, :worker_id),
-       run_id: Keyword.fetch!(opts, :run_id),
-       run_pid: Keyword.fetch!(opts, :run_pid),
-       started_at: now,
-       heartbeat_at: now,
-       last_event_at: now
-     }}
+    state = %__MODULE__{
+      worker_id: Keyword.fetch!(opts, :worker_id),
+      run_id: Keyword.fetch!(opts, :run_id),
+      command: Keyword.get(opts, :command),
+      executor: Keyword.get(opts, :executor),
+      started_at: now,
+      heartbeat_at: now,
+      last_event_at: now
+    }
+
+    persist(state)
+    {:ok, state}
   end
 
   @impl true
-  def handle_cast({:run_task, task}, %__MODULE__{state: "idle"} = state) do
-    owner = self()
-    command = worker_command()
-    env = worker_env(state, task)
-    task_id = task.task_id
+  def handle_cast({:assign, task}, %__MODULE__{state: "idle"} = state) do
+    busy_state =
+      state
+      |> Map.put(:state, "busy")
+      |> Map.put(:current_task_id, value(task, :task_id))
+      |> Map.put(:heartbeat_at, now())
+      |> Map.put(:last_event_at, now())
+      |> persist()
 
-    {runner_pid, runner_ref} =
-      spawn_monitor(fn ->
-        result = execute(command, env)
-        send(owner, {:worker_exec_done, task_id, result})
-      end)
-
-    now = timestamp()
-
-    {:noreply,
-     %{
-       state
-       | state: "running",
-         current_task_id: task_id,
-         runner_pid: runner_pid,
-         runner_ref: runner_ref,
-         heartbeat_at: now,
-         last_event_at: now
-     }}
+    send(self(), {:execute, task})
+    {:noreply, busy_state}
   end
 
-  def handle_cast({:run_task, _task}, state) do
+  @impl true
+  def handle_cast({:assign, _task}, state) do
     {:noreply, state}
   end
 
@@ -107,72 +82,77 @@ defmodule Beamwarden.ExternalWorker do
   end
 
   @impl true
-  def handle_info({:worker_exec_done, task_id, result}, %__MODULE__{} = state) do
-    send(state.run_pid, {:worker_result, state.worker_id, task_id, result})
-    now = timestamp()
+  def handle_info({:execute, task}, %__MODULE__{} = state) do
+    task_id = value(task, :task_id)
 
     next_state =
-      case result do
+      case execute_task(task, state) do
         {:ok, summary} ->
-          %{
-            state
-            | state: "idle",
-              current_task_id: nil,
-              runner_pid: nil,
-              runner_ref: nil,
-              last_result_summary: summary,
-              last_exit_status: 0,
-              heartbeat_at: now,
-              last_event_at: now
-          }
+          Beamwarden.RunServer.worker_result(
+            state.run_id,
+            state.worker_id,
+            task_id,
+            {:ok, summary}
+          )
 
-        {:error, summary} ->
-          %{
-            state
-            | state: "idle",
-              current_task_id: nil,
-              runner_pid: nil,
-              runner_ref: nil,
-              last_result_summary: summary,
-              last_exit_status: 1,
-              heartbeat_at: now,
-              last_event_at: now
-          }
+          state
+          |> Map.put(:state, "completed")
+          |> Map.put(:current_task_id, nil)
+          |> Map.put(:last_result_summary, summary)
+          |> Map.put(:heartbeat_at, now())
+          |> Map.put(:last_event_at, now())
+          |> persist()
+
+        {:error, error} ->
+          Beamwarden.RunServer.worker_result(
+            state.run_id,
+            state.worker_id,
+            task_id,
+            {:error, error}
+          )
+
+          state
+          |> Map.put(:state, "failed")
+          |> Map.put(:current_task_id, nil)
+          |> Map.put(:last_result_summary, error)
+          |> Map.put(:heartbeat_at, now())
+          |> Map.put(:last_event_at, now())
+          |> persist()
       end
 
     {:noreply, next_state}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, :normal}, %__MODULE__{runner_ref: ref} = state) do
-    {:noreply, %{state | runner_ref: nil, runner_pid: nil}}
+  defp execute_task(task, %__MODULE__{executor: executor}) when is_function(executor, 1) do
+    executor.(normalize_task(task))
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %__MODULE__{runner_ref: ref} = state) do
-    summary = "worker crashed: #{inspect(reason)}"
-
-    send(
-      state.run_pid,
-      {:worker_result, state.worker_id, state.current_task_id, {:error, summary}}
-    )
-
-    now = timestamp()
-
-    {:noreply,
-     %{
-       state
-       | state: "idle",
-         current_task_id: nil,
-         runner_pid: nil,
-         runner_ref: nil,
-         last_result_summary: summary,
-         last_exit_status: 1,
-         heartbeat_at: now,
-         last_event_at: now
-     }}
+  defp execute_task(task, %__MODULE__{command: command}) when is_binary(command) do
+    run_command(command, task)
   end
 
-  def handle_info(_message, state) do
-    {:noreply, state}
+  defp execute_task(task, %__MODULE__{}) do
+    run_command("printf '%s\\n' \"$BEAMWARDEN_TASK_PAYLOAD\"", task)
+  end
+
+  defp run_command(command, task) do
+    env = [
+      {"BEAMWARDEN_TASK_ID", value(task, :task_id) || ""},
+      {"BEAMWARDEN_RUN_ID", value(task, :run_id) || ""},
+      {"BEAMWARDEN_TASK_TITLE", value(task, :title) || ""},
+      {"BEAMWARDEN_TASK_PAYLOAD", value(task, :payload) || ""}
+    ]
+
+    {output, exit_status} =
+      System.cmd("sh", ["-lc", command], env: env, stderr_to_stdout: true)
+
+    cleaned = output |> String.trim() |> blank_to_nil()
+
+    if exit_status == 0 do
+      {:ok, cleaned || value(task, :title) || value(task, :task_id)}
+    else
+      {:error, cleaned || "command exited with status #{exit_status}"}
+    end
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
@@ -184,49 +164,32 @@ defmodule Beamwarden.ExternalWorker do
       started_at: state.started_at,
       heartbeat_at: state.heartbeat_at,
       last_event_at: state.last_event_at,
-      last_result_summary: state.last_result_summary,
-      last_exit_status: state.last_exit_status
+      last_result_summary: state.last_result_summary
     }
   end
 
-  defp via(worker_id), do: {:via, Registry, {Beamwarden.WorkerRegistry, worker_id}}
-
-  defp worker_command do
-    case Beamwarden.AppIdentity.get_env(:orchestrator_worker_command) do
-      {cmd, args} when is_binary(cmd) and is_list(args) -> {cmd, args}
-      %{cmd: cmd, args: args} when is_binary(cmd) and is_list(args) -> {cmd, args}
-      _ -> {"/bin/sh", ["-lc", "printf 'processed:%s\\n' \"$BW_TASK_PAYLOAD\""]}
-    end
+  defp normalize_task(task) do
+    %{
+      task_id: value(task, :task_id),
+      run_id: value(task, :run_id),
+      title: value(task, :title),
+      payload: value(task, :payload)
+    }
   end
 
-  defp worker_env(state, task) do
-    [
-      {"BW_RUN_ID", state.run_id},
-      {"BW_WORKER_ID", state.worker_id},
-      {"BW_TASK_ID", task.task_id},
-      {"BW_TASK_PAYLOAD", task.payload}
-    ]
+  defp persist(%__MODULE__{} = state) do
+    Beamwarden.WorkerStore.save(snapshot_map(state))
+    state
   end
 
-  defp execute({command, args}, env) do
-    try do
-      case System.cmd(command, args, env: env, stderr_to_stdout: true) do
-        {output, 0} -> {:ok, normalize_output(output, "ok")}
-        {output, status} -> {:error, normalize_output(output, "exit=#{status}")}
-      end
-    rescue
-      error -> {:error, "worker execution failed: #{Exception.message(error)}"}
-    end
-  end
-
-  defp normalize_output(output, fallback) do
-    case output |> to_string() |> String.trim() do
-      "" -> fallback
-      text -> text
-    end
-  end
-
-  defp timestamp do
+  defp now do
     DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   end
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+
+  defp via(worker_id), do: {:via, Registry, {Beamwarden.ExternalWorkerRegistry, worker_id}}
+  defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 end

@@ -3,16 +3,9 @@ defmodule Beamwarden.RunServer do
 
   use GenServer
 
-  defstruct [
-    :run_id,
-    :prompt,
-    :created_at,
-    :updated_at,
-    tasks: [],
-    workers: %{},
-    requested_workers: 1,
-    status: "pending"
-  ]
+  alias Beamwarden.TaskScheduler
+
+  defstruct [:run_id, :prompt, :created_at, :updated_at, :worker_opts, tasks: [], worker_ids: []]
 
   def child_spec(opts) do
     run_id = Keyword.fetch!(opts, :run_id)
@@ -29,77 +22,52 @@ defmodule Beamwarden.RunServer do
     GenServer.start_link(__MODULE__, opts, name: via(run_id))
   end
 
-  def start_run(prompt, opts \\ []) do
-    run_id = Keyword.get(opts, :run_id, unique_run_id())
-
-    child_opts =
-      opts
-      |> Keyword.put(:run_id, run_id)
-      |> Keyword.put(:prompt, prompt)
-      |> Keyword.put_new(:workers, 1)
-
-    with {:ok, _pid} <-
-           DynamicSupervisor.start_child(Beamwarden.RunSupervisor, {__MODULE__, child_opts}) do
-      {:ok, snapshot(run_id)}
-    end
-  end
-
   def snapshot(run_id) do
     GenServer.call(via(run_id), :snapshot)
   end
 
-  def list_tasks(run_id) do
-    GenServer.call(via(run_id), :tasks)
+  def running?(run_id) do
+    Registry.lookup(Beamwarden.RunRegistry, run_id) != []
   end
 
-  def list_runs do
-    Beamwarden.RunRegistry
-    |> Registry.select([{{:"$1", :_, :_}, [], [:"$1"]}])
-    |> Enum.map(&snapshot/1)
-    |> Enum.sort_by(& &1.run_id)
-  end
-
-  def stop(run_id) do
-    case Registry.lookup(Beamwarden.RunRegistry, run_id) do
-      [{pid, _value}] -> GenServer.call(pid, :stop, :infinity)
-      [] -> :ok
-    end
+  def worker_result(run_id, worker_id, task_id, result) do
+    GenServer.cast(via(run_id), {:worker_result, worker_id, task_id, result})
   end
 
   @impl true
   def init(opts) do
     run_id = Keyword.fetch!(opts, :run_id)
     prompt = Keyword.fetch!(opts, :prompt)
-    requested_workers = max(Keyword.get(opts, :workers, 1), 1)
-    now = timestamp()
-    tasks = Beamwarden.TaskScheduler.initial_tasks(run_id, prompt)
+    worker_count = max(Keyword.get(opts, :workers, 1), 0)
+    now = now()
 
     state = %__MODULE__{
       run_id: run_id,
       prompt: prompt,
+      tasks: TaskScheduler.build_initial_tasks(run_id, prompt),
       created_at: now,
       updated_at: now,
-      tasks: tasks,
-      requested_workers: requested_workers,
-      status: Beamwarden.TaskScheduler.run_status(tasks)
+      worker_opts: Keyword.get(opts, :worker_opts, [])
     }
 
-    state =
-      Enum.reduce(1..requested_workers, state, fn index, acc ->
-        worker_id = "#{run_id}-worker-#{index}"
+    worker_ids =
+      if worker_count > 0 do
+        Enum.map(1..worker_count, fn index ->
+          {:ok, worker_id} =
+            Beamwarden.WorkerSupervisor.start_worker(
+              run_id,
+              Keyword.merge(state.worker_opts, worker_id: "#{run_id}-worker-#{index}")
+            )
 
-        {:ok, _pid} =
-          Beamwarden.WorkerSupervisor.start_worker(
-            worker_id: worker_id,
-            run_id: run_id,
-            run_pid: self()
-          )
+          worker_id
+        end)
+      else
+        []
+      end
 
-        put_in(acc.workers[worker_id], %{state: "idle", current_task_id: nil})
-      end)
-      |> dispatch()
-
-    {:ok, state}
+    next_state = persist(%{state | worker_ids: worker_ids})
+    send(self(), :dispatch)
+    {:ok, next_state}
   end
 
   @impl true
@@ -107,82 +75,79 @@ defmodule Beamwarden.RunServer do
     {:reply, snapshot_map(state), state}
   end
 
-  def handle_call(:tasks, _from, %__MODULE__{} = state) do
-    {:reply, Enum.sort_by(state.tasks, &String.to_integer(&1.task_id)), state}
-  end
+  @impl true
+  def handle_cast({:worker_result, worker_id, task_id, {:ok, summary}}, %__MODULE__{} = state) do
+    next_state =
+      state
+      |> Map.put(:tasks, TaskScheduler.complete_task(state.tasks, task_id, worker_id, summary))
+      |> Map.put(:updated_at, now())
+      |> persist()
 
-  def handle_call(:stop, _from, %__MODULE__{} = state) do
-    Enum.each(Map.keys(state.workers), &Beamwarden.ExternalWorker.stop/1)
-    {:stop, :normal, :ok, state}
+    send(self(), :dispatch)
+    {:noreply, next_state}
   end
 
   @impl true
-  def handle_info({:worker_result, worker_id, task_id, result}, %__MODULE__{} = state) do
-    tasks = Beamwarden.TaskScheduler.finish_task(state.tasks, task_id, worker_id, result)
-
-    state =
+  def handle_cast({:worker_result, worker_id, task_id, {:error, error}}, %__MODULE__{} = state) do
+    next_state =
       state
-      |> Map.put(:tasks, tasks)
-      |> put_in([Access.key(:workers), worker_id], %{state: "idle", current_task_id: nil})
-      |> touch()
-      |> dispatch()
+      |> Map.put(:tasks, TaskScheduler.fail_task(state.tasks, task_id, worker_id, error))
+      |> Map.put(:updated_at, now())
+      |> persist()
 
-    {:noreply, state}
+    send(self(), :dispatch)
+    {:noreply, next_state}
   end
 
-  def handle_info(_message, state) do
-    {:noreply, state}
-  end
+  @impl true
+  def handle_info(:dispatch, %__MODULE__{} = state) do
+    {tasks, assigned?} =
+      Beamwarden.WorkerSupervisor.list_live_workers(run_id: state.run_id)
+      |> Enum.filter(&(value(&1, :state) == "idle"))
+      |> Enum.reduce({state.tasks, false}, fn worker, {tasks, assigned?} ->
+        worker_id = value(worker, :worker_id)
 
-  defp dispatch(%__MODULE__{} = state) do
-    case next_idle_worker(state) do
-      nil ->
-        finalize(state)
+        case TaskScheduler.assign_next_task(tasks, worker_id) do
+          {:ok, task, updated_tasks} ->
+            Beamwarden.ExternalWorker.assign(worker_id, task)
+            {updated_tasks, true}
 
-      worker_id ->
-        case Beamwarden.TaskScheduler.assign_next_task(state.tasks, worker_id) do
-          {:none, _tasks} ->
-            finalize(state)
-
-          {task, tasks} ->
-            Beamwarden.ExternalWorker.run_task(worker_id, task)
-
-            state
-            |> Map.put(:tasks, tasks)
-            |> put_in([Access.key(:workers), worker_id], %{
-              state: "running",
-              current_task_id: task.task_id
-            })
-            |> touch()
-            |> dispatch()
+          :none ->
+            {tasks, assigned?}
         end
-    end
+      end)
+
+    next_state =
+      if assigned? do
+        state
+        |> Map.put(:tasks, tasks)
+        |> Map.put(:updated_at, now())
+        |> persist()
+      else
+        state
+      end
+
+    {:noreply, next_state}
   end
 
-  defp finalize(%__MODULE__{} = state) do
-    %{state | status: Beamwarden.TaskScheduler.run_status(state.tasks), updated_at: timestamp()}
-  end
-
-  defp next_idle_worker(%__MODULE__{} = state) do
-    state.workers
-    |> Enum.find_value(fn {worker_id, worker} ->
-      if worker.state == "idle", do: worker_id, else: nil
-    end)
+  defp persist(%__MODULE__{} = state) do
+    snapshot = snapshot_map(state)
+    Beamwarden.RunStore.save(snapshot)
+    %{state | updated_at: value(snapshot, :updated_at)}
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
-    counts = Beamwarden.TaskScheduler.counts(state.tasks)
+    counts = TaskScheduler.counts(state.tasks)
 
     %{
       run_id: state.run_id,
       prompt: state.prompt,
-      status: Beamwarden.TaskScheduler.run_status(state.tasks),
+      status: TaskScheduler.status(state.tasks, length(state.worker_ids)),
       created_at: state.created_at,
-      updated_at: state.updated_at,
-      task_ids: Enum.map(state.tasks, & &1.task_id),
-      worker_ids: Map.keys(state.workers) |> Enum.sort(),
-      worker_count: map_size(state.workers),
-      requested_workers: state.requested_workers,
+      updated_at: state.updated_at || now(),
+      task_ids: Enum.map(state.tasks, &value(&1, :task_id)),
+      worker_ids: state.worker_ids,
+      tasks: Enum.map(state.tasks, &normalize_task/1),
       task_count: counts.task_count,
       pending_count: counts.pending_count,
       running_count: counts.running_count,
@@ -191,18 +156,25 @@ defmodule Beamwarden.RunServer do
     }
   end
 
-  defp touch(%__MODULE__{} = state) do
-    %{state | status: Beamwarden.TaskScheduler.run_status(state.tasks), updated_at: timestamp()}
-  end
-
-  defp unique_run_id do
-    suffix = Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
-    "run-#{suffix}"
+  defp normalize_task(task) do
+    %{
+      task_id: value(task, :task_id),
+      run_id: value(task, :run_id),
+      title: value(task, :title),
+      payload: value(task, :payload),
+      status: value(task, :status),
+      assigned_worker: value(task, :assigned_worker),
+      result_summary: value(task, :result_summary),
+      error: value(task, :error),
+      created_at: value(task, :created_at),
+      updated_at: value(task, :updated_at)
+    }
   end
 
   defp via(run_id), do: {:via, Registry, {Beamwarden.RunRegistry, run_id}}
+  defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 
-  defp timestamp do
+  defp now do
     DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   end
 end

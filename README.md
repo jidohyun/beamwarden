@@ -41,6 +41,7 @@ The Elixir workspace currently provides:
 - a canonical `mix beamwarden` CLI surface
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
+- tmux-free local orchestration runs with `run`, `run-status`, `task-list`, and `worker-list`
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`
@@ -115,6 +116,7 @@ mix beamwarden bootstrap "review MCP tool"
 mix beamwarden daemon-status
 mix beamwarden control-plane-status
 mix beamwarden cluster-status
+mix beamwarden run "review this repo and propose fixes" --workers 2
 mix beamwarden start-session --id smoke-session "review MCP tool"
 mix beamwarden session-status smoke-session
 ```
@@ -190,6 +192,9 @@ Planning/history docs:
 Key runtime files:
 
 - `elixir/lib/beamwarden/cli.ex` — CLI surface
+- `elixir/lib/beamwarden/orchestrator.ex` — local run/task/worker orchestration facade
+- `elixir/lib/beamwarden/run_server.ex` — per-run supervision and task aggregation
+- `elixir/lib/beamwarden/external_worker.ex` — supervised external worker wrapper
 - `elixir/lib/beamwarden/runtime.ex` — structural runtime mirror
 - `elixir/lib/beamwarden/query_engine.ex` — turn/session engine
 - `elixir/lib/beamwarden/control_plane.ex` — session/workflow orchestration facade

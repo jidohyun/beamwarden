@@ -9,8 +9,8 @@ defmodule Beamwarden.Application do
     end
 
     children = [
-      {Beamwarden.DaemonSupervisor, []},
-      {Beamwarden.OrchestratorSupervisor, []}
+      {Beamwarden.OrchestratorSupervisor, []},
+      {Beamwarden.DaemonSupervisor, []}
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Beamwarden.Supervisor)

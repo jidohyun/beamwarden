@@ -116,31 +116,33 @@ defmodule Beamwarden.CLI do
   def run_local(["run", prompt | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [workers: :integer])
 
-    case Beamwarden.RunServer.start_run(prompt, workers: opts[:workers] || 1) do
-      {:ok, snapshot} -> {:ok, render_run(snapshot)}
-      {:error, reason} -> {:error, "Failed to start run: #{inspect(reason)}"}
+    case Beamwarden.Orchestrator.start_run(prompt, workers: opts[:workers] || 1) do
+      {:ok, snapshot} ->
+        {:ok, Beamwarden.Orchestrator.render_run(snapshot)}
+
+      {:error, reason} ->
+        {:error, "Failed to start run: #{inspect(reason)}"}
     end
   end
 
   def run_local(["run-status", run_id]) do
-    case Registry.lookup(Beamwarden.RunRegistry, run_id) do
-      [{_pid, _value}] -> {:ok, Beamwarden.RunServer.snapshot(run_id) |> render_run()}
-      [] -> {:error, "Run not found: #{run_id}"}
+    case Beamwarden.Orchestrator.run_snapshot(run_id) do
+      {:ok, snapshot} -> {:ok, Beamwarden.Orchestrator.render_run(snapshot)}
+      {:error, :not_found} -> {:error, "Run not found: #{run_id}"}
+      {:error, reason} -> {:error, "Failed to load run status: #{inspect(reason)}"}
     end
   end
 
   def run_local(["task-list", run_id]) do
-    case Registry.lookup(Beamwarden.RunRegistry, run_id) do
-      [{_pid, _value}] ->
-        {:ok, Beamwarden.RunServer.list_tasks(run_id) |> render_task_list(run_id)}
-
-      [] ->
-        {:error, "Run not found: #{run_id}"}
+    case Beamwarden.Orchestrator.task_list(run_id) do
+      {:ok, tasks} -> {:ok, Beamwarden.Orchestrator.render_tasks(run_id, tasks)}
+      {:error, :not_found} -> {:error, "Run not found: #{run_id}"}
+      {:error, reason} -> {:error, "Failed to load task list: #{inspect(reason)}"}
     end
   end
 
   def run_local(["worker-list"]) do
-    {:ok, Beamwarden.ExternalWorker.list_workers() |> render_worker_list()}
+    {:ok, Beamwarden.Orchestrator.worker_list() |> Beamwarden.Orchestrator.render_workers()}
   end
 
   def run_local(["session-start", session_id]) do

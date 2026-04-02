@@ -12,7 +12,7 @@ defmodule Beamwarden.OrchestratorSupervisor do
     children = [
       {Registry, keys: :unique, name: Beamwarden.RunRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: Beamwarden.RunSupervisor},
-      {Registry, keys: :unique, name: Beamwarden.WorkerRegistry},
+      {Registry, keys: :unique, name: Beamwarden.ExternalWorkerRegistry},
       {Beamwarden.WorkerSupervisor, []}
     ]
 

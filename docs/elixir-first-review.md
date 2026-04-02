@@ -13,7 +13,7 @@ mix compile
 mix test
 ```
 
-The `mix claw` surface now covers four practical groups:
+The `mix beamwarden` surface now covers four practical groups:
 
 1. **Reporting and inventory**
    - `summary`
@@ -65,7 +65,7 @@ cd elixir
 mix format --check-formatted
 mix compile
 mix test
-mix claw bootstrap "review MCP tool"
-mix claw session-submit review-session "review MCP tool"
-mix claw workflow-add-step review-flow "bootstrap session"
+mix beamwarden bootstrap "review MCP tool"
+mix beamwarden session-submit review-session "review MCP tool"
+mix beamwarden workflow-add-step review-flow "bootstrap session"
 ```

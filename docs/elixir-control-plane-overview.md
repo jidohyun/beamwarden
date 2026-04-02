@@ -36,7 +36,7 @@ See `docs/elixir-cluster-daemon-review.md` for the current review note and limit
 ```bash
 cd elixir
 mix beamwarden daemon-status
-mix beamwarden daemon-run --name claw_code_daemon --longname
+mix beamwarden daemon-run --name beamwarden_daemon --longname
 mix beamwarden control-plane-status
 mix beamwarden cluster-status
 mix beamwarden start-session --id smoke-session "review MCP tool"
@@ -46,8 +46,6 @@ mix beamwarden start-workflow smoke-flow "Update README" "Update docs"
 mix beamwarden workflow-status smoke-flow
 mix beamwarden advance-task smoke-flow 1 completed "done"
 ```
-
-`mix claw ...` remains available as a compatibility alias. `BEAMWARDEN_*` env vars are the preferred operator surface, `CLAW_*` still works as a compatibility fallback, and the existing `claw_code_daemon` / `claw_code_cli` node labels remain the live runtime contract for now.
 
 ## Verification
 
@@ -66,14 +64,14 @@ Use longname mode when the daemon node is addressed with a fully-qualified host 
 ```bash
 # daemon host
 cd elixir
-BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name beamwarden_daemon --longname
 
 # remote client
 cd elixir
-BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@daemon.example.internal \
 BEAMWARDEN_DAEMON_COOKIE=clawsecret \
 BEAMWARDEN_DAEMON_NAME_MODE=longnames \
 mix beamwarden session-status smoke-session
 ```
 
-Use the same cookie and the same name mode on every participating node. Shortnames remain the default for same-host/local development. `CLAW_*` env vars remain supported as compatibility fallbacks.
+Use the same cookie and the same name mode on every participating node. Shortnames remain the default for same-host/local development.

@@ -39,8 +39,7 @@ The current repository is best understood as:
 
 The Elixir workspace currently provides:
 
-- a **preferred** `mix beamwarden` CLI surface
-- a compatibility `mix claw` CLI alias
+- a `mix beamwarden` CLI surface
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
 - daemon-aware session/workflow routing
@@ -126,19 +125,17 @@ mix beamwarden session-status smoke-session
 
 ```bash
 cd elixir
-mix beamwarden daemon-run --name claw_code_daemon
+mix beamwarden daemon-run --name beamwarden_daemon
 ```
 
 ### 4. Use the daemon from another shell
 
 ```bash
 cd elixir
-BEAMWARDEN_DAEMON_NODE=claw_code_daemon@$(hostname -s) \
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s) \
 BEAMWARDEN_DAEMON_COOKIE=clawcluster \
 mix beamwarden daemon-status
 ```
-
-Prefer `BEAMWARDEN_*` env vars going forward. `CLAW_*` remains available as a compatibility fallback during the rename transition, and the runtime still keeps the established `claw_code_daemon` / `claw_code_cli` node labels until that contract changes in a later slice.
 
 ---
 
@@ -158,11 +155,11 @@ Example:
 # daemon host
 cd elixir
 BEAMWARDEN_DAEMON_COOKIE=clawcluster \
-mix beamwarden daemon-run --name claw_code_daemon --longname
+mix beamwarden daemon-run --name beamwarden_daemon --longname
 
 # remote client
 cd elixir
-BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@daemon.example.internal \
 BEAMWARDEN_DAEMON_COOKIE=clawcluster \
 BEAMWARDEN_DAEMON_NAME_MODE=longnames \
 mix beamwarden daemon-status

@@ -30,7 +30,7 @@ Run a long-lived daemon node:
 
 ```bash
 cd elixir
-mix beamwarden daemon-run --name claw_code_daemon
+mix beamwarden daemon-run --name beamwarden_daemon
 # add --longname for cross-host / FQDN operation
 ```
 
@@ -38,26 +38,25 @@ Talk to it from another shell:
 
 ```bash
 cd elixir
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden daemon-status
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden start-session --id smoke-session "review MCP tool"
-CLAW_DAEMON_NODE=claw_code_daemon@$(hostname -s) mix beamwarden session-status smoke-session
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s) mix beamwarden daemon-status
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s) mix beamwarden start-session --id smoke-session "review MCP tool"
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s) mix beamwarden session-status smoke-session
 ```
 
-If the daemon node uses a fully-qualified host (for example `claw_code_daemon@daemon.example.internal`), run both the daemon and clients in longname mode:
+If the daemon node uses a fully-qualified host (for example `beamwarden_daemon@daemon.example.internal`), run both the daemon and clients in longname mode:
 
 ```bash
 # daemon host
-BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawsecret mix beamwarden daemon-run --name beamwarden_daemon --longname
 
 # remote client
-BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon.example.internal \
+BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@daemon.example.internal \
 BEAMWARDEN_DAEMON_COOKIE=clawsecret \
 BEAMWARDEN_DAEMON_NAME_MODE=longnames \
 mix beamwarden daemon-status
 ```
 
 Use the same cookie on every participating node. Shortname mode remains the default for local/same-host workflows.
-Prefer `BEAMWARDEN_*` env vars; `CLAW_*` remains available as a compatibility fallback during this transition.
 
 Representative local commands:
 

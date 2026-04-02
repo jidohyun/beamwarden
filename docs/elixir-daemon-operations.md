@@ -10,8 +10,6 @@ The current daemon bootstrap supports both:
 - local shortname smoke tests via `mix beamwarden daemon-run`
 - longname-aware startup via `mix beamwarden daemon-run --longname`
 
-During this rename slice, the daemon runtime still uses the established `claw_code_daemon` / `claw_code_cli` node labels so existing distributed setups keep working while the Beamwarden command/env surfaces take over.
-
 For more controlled production-like operation, you can still prestart the BEAM VM yourself with `--name` / `--cookie` and then boot the daemon inside that already-distributed node.
 
 ## 1. Local single-host smoke test
@@ -20,14 +18,14 @@ Use this when the daemon and clients are running on the same machine:
 
 ```bash
 cd elixir
-BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name claw_code_daemon --cookie clawcluster
+BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name beamwarden_daemon --cookie clawcluster
 ```
 
 From another shell on the same host:
 
 ```bash
 cd elixir
-export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@$(hostname -s)
+export BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s)
 export BEAMWARDEN_DAEMON_COOKIE=clawcluster
 
 mix beamwarden daemon-status
@@ -49,14 +47,14 @@ Assumptions for the examples below:
 
 - daemon host FQDN: `daemon1.example.com`
 - client host FQDN: `client1.example.com`
-- daemon node name: `claw_code_daemon@daemon1.example.com`
+- daemon node name: `beamwarden_daemon@daemon1.example.com`
 - shared cookie: `clawcluster`
 
 ### Step 1: start the daemon host with a longname
 
 ```bash
 cd elixir
-BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name claw_code_daemon --longname
+BEAMWARDEN_DAEMON_COOKIE=clawcluster mix beamwarden daemon-run --name beamwarden_daemon --longname
 ```
 
 At this point the daemon ledger should be live under `.port_sessions/cluster/<node>/ledger.dets`.
@@ -65,7 +63,7 @@ At this point the daemon ledger should be live under `.port_sessions/cluster/<no
 
 ```bash
 cd elixir
-export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon1.example.com
+export BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@daemon1.example.com
 export BEAMWARDEN_DAEMON_COOKIE=clawcluster
 export BEAMWARDEN_DAEMON_NAME_MODE=longnames
 
@@ -76,12 +74,12 @@ mix beamwarden start-session --id smoke-session "review MCP tool"
 Expected daemon status indicators:
 
 - `role=client` or `role=standalone` if the daemon is unreachable and the client falls back locally
-- `configured_daemon_node=claw_code_daemon@daemon1.example.com`
+- `configured_daemon_node=beamwarden_daemon@daemon1.example.com`
 - `daemon_reachable=true`
 
 Expected session output indicator:
 
-- `owner_node=claw_code_daemon@daemon1.example.com`
+- `owner_node=beamwarden_daemon@daemon1.example.com`
 
 ### Step 3: inspect the same session from another client host
 
@@ -89,7 +87,7 @@ Any other client node that starts with a longname and the same cookie can point 
 
 ```bash
 cd elixir
-export BEAMWARDEN_DAEMON_NODE=claw_code_daemon@daemon1.example.com
+export BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@daemon1.example.com
 export BEAMWARDEN_DAEMON_COOKIE=clawcluster
 export BEAMWARDEN_DAEMON_NAME_MODE=longnames
 
@@ -107,7 +105,7 @@ The daemon-first control plane is intentionally conservative:
 - then it falls back to reachable persisted ownership metadata
 - finally it uses deterministic `:erlang.phash2/2` routing across connected members
 
-If `BEAMWARDEN_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix beamwarden daemon-status` (or `Beamwarden.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case. The older `CLAW_*` env vars and `mix claw ...` remain available as compatibility fallbacks.
+If `BEAMWARDEN_DAEMON_NODE` is configured but unreachable, proxyable CLI commands fall back to local execution instead of crashing. `mix beamwarden daemon-status` (or `Beamwarden.CLI.run(["daemon-status"])`) will show `daemon_reachable=false` in that case.
 
 ## Current limits
 

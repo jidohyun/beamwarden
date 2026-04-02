@@ -41,7 +41,7 @@ The Elixir workspace currently provides:
 - a canonical `mix beamwarden` CLI surface
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
-- tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `retry-task`, `cancel-run`, `worker-list`, and `logs`
+- tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, and `logs`
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`
@@ -117,6 +117,9 @@ mix beamwarden daemon-status
 mix beamwarden control-plane-status
 mix beamwarden cluster-status
 mix beamwarden run "review this repo and propose fixes" --workers 2
+mix beamwarden retry-task <run-id> <task-id>
+mix beamwarden cancel-run <run-id>
+mix beamwarden logs <run-id>
 mix beamwarden start-session --id smoke-session "review MCP tool"
 mix beamwarden session-status smoke-session
 ```
@@ -168,6 +171,7 @@ mix beamwarden daemon-status
 See the full operator guide:
 
 - `docs/elixir-daemon-operations.md`
+- `docs/elixir-orchestrator-operations.md`
 
 ---
 
@@ -178,6 +182,7 @@ Start here if you want to understand the current system:
 - `docs/elixir-control-plane-overview.md`
 - `docs/elixir-cluster-daemon-review.md`
 - `docs/elixir-daemon-operations.md`
+- `docs/elixir-orchestrator-operations.md`
 
 Planning/history docs:
 

@@ -182,10 +182,7 @@ defmodule Beamwarden.CLI do
     {opts, _, _} = OptionParser.parse(rest, strict: [older_than_seconds: :integer])
 
     {:ok,
-     opts
-     |> Enum.into([])
-     |> Beamwarden.Orchestrator.cleanup_state()
-     |> Beamwarden.Orchestrator.render_cleanup()}
+     opts |> Beamwarden.Orchestrator.cleanup_state() |> Beamwarden.Orchestrator.render_cleanup()}
   end
 
   def run_local(["session-start", session_id]) do

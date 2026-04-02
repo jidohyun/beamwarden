@@ -20,14 +20,12 @@ mix beamwarden worker-list
 mix beamwarden retry-task <run-id> <task-id>
 mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
-mix beamwarden cleanup-runs [--ttl-seconds 3600]
+mix beamwarden logs <run-id> --follow
+mix beamwarden cleanup-state --older-than-seconds 86400
 ```
 
-`logs --follow` remains a **single-shot replay hint** in this slice: Beamwarden reports whether the log view is coming from a live runtime or only from persisted state, then replays the stored event summary once.
-
-Today `logs --follow` is intentionally conservative: it replays the currently available event snapshot exactly once and then exits. When the run is still active, the CLI labels that output as a runtime snapshot replay; when the run is no longer active, it labels it as a persisted snapshot replay. In both cases Beamwarden avoids pretending it is tailing a live process stream.
-
-Today `logs --follow` is intentionally conservative: it reuses the persisted event rendering and adds an explicit `follow=not_implemented_showing_persisted_events_only` banner instead of pretending Beamwarden is tailing a live process stream. That banner is part of the operator contract until real streaming lands.
+`logs` should always provide a persisted summary view.
+`logs --follow` should stream newly persisted orchestration events until the run settles into a terminal state (or until an explicit follow timeout is hit).
 
 ## Worker reporting: active vs persisted
 
@@ -63,11 +61,12 @@ Use this when the operator wants the run to stop accepting or finishing more wor
 
 Expected behavior:
 
-- mark the run as cancelled
+- mark the run as `cancelling` immediately when work is still in flight
 - stop assigning pending work
-- move pending tasks to a cancelled terminal state
-- mark in-progress tasks as cancelled once the runtime has acknowledged the stop
-- append a run/task cancellation event for later inspection
+- move pending tasks to a cancelled terminal state immediately
+- move in-progress tasks to `cancel_requested` until the worker reports back
+- mark the run as `cancelled` once all in-flight tasks have acknowledged the stop
+- append explicit cancellation lifecycle events (`run_cancel_requested`, `task_cancel_requested`, `task_cancelled`, `run_cancelled`)
 
 This is a **best-effort local orchestration stop**, not a distributed consensus guarantee.
 
@@ -78,31 +77,32 @@ This is a **best-effort local orchestration stop**, not a distributed consensus 
 The useful minimum is:
 
 - recent orchestration events (`run_started`, `task_assigned`, `task_completed`, `task_failed`, `task_retried`, `run_cancelled`)
+- follow-mode output should emit only new persisted event lines after the initial snapshot
 - worker output summaries or final result/error text
 - timestamps that let operators correlate the event stream with `run-status` and `worker-list`
 - explicit metadata for `run_status`, `run_lifecycle`, and `event_source` so operators know whether they are reading a live runtime view or a persisted snapshot
 
 That gives Beamwarden an answer to "what happened?" even after the worker process is gone.
 
-### Current `--follow` contract
+## Persisted-state cleanup / expiry
 
-Until Beamwarden grows a real log broker/follower, operators should read `logs <run-id> --follow` as:
+Beamwarden keeps run snapshots, worker snapshots, and event logs under `.port_sessions/`.
+Those files are intentionally durable enough for post-run debugging, but they should not accumulate forever.
 
-- render the persisted event history first
-- emit an explicit warning that live follow is not implemented
-- avoid implying that the CLI is attached to a running worker stdout/stderr stream
+Use:
 
-That keeps the interface honest while preserving a stable command shape for the later streaming implementation.
+```bash
+mix beamwarden cleanup-state --older-than-seconds 86400
+```
 
-## Phase 3 review checkpoints
+Expected behavior:
 
-Phase 3 is the recovery/lease hardening slice. The current Phase 2 runtime already persists useful run, worker, and event snapshots, but the next implementation should preserve these review constraints:
+- delete only **persisted** run snapshots whose status is already terminal (`completed`, `failed`, `cancelled`)
+- skip any run that still has a live `RunServer`
+- delete persisted worker snapshots whose worker process is no longer registered
+- delete event files for removed runs (and other orphaned old event logs)
 
-- **separate liveness from history** — persisted rows are last-known state, not proof that a worker or run is still active
-- **make cleanup lease-aware** — expiry must never delete data that still belongs to an active run/worker process
-- **requeue with evidence** — when a lease expires or a worker is judged stale, append a visible recovery event before reassigning work
-- **keep operator output compact** — recovery metadata should clarify why a task moved instead of turning `logs` into raw process replay
-- **document bounded retention** — operators need to know which files are durable state vs recyclable cache/history
+This keeps cleanup conservative: Beamwarden prunes expired history, but it does not delete potentially recoverable in-flight runtime state.
 
 ## Review notes for this slice
 

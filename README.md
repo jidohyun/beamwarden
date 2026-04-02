@@ -1,5 +1,7 @@
 # Beamwarden
 
+<img width="238" height="512" alt="image" src="https://github.com/user-attachments/assets/f00dfd1d-6413-4ecb-b50a-0c29f21d04b7" />
+
 An **Elixir-first clean-room port repository** for agent-harness and control-plane research.
 
 This project rebuilds selected Claude-style harness concepts as a **daemon-first BEAM runtime** with:

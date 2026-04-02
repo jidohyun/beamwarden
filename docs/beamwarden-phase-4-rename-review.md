@@ -2,6 +2,8 @@
 
 This note captures the documentation and reviewer concerns for the **module/file namespace** migration from `ClawCode.*` / `elixir/lib/claw_code` to `Beamwarden.*` / `elixir/lib/beamwarden`.
 
+> Historical note: this review documents the pre-breaking compatibility phase. The later breaking cleanup removed `mix claw`, `CLAW_*` env fallbacks, and the old `claw_code_daemon` / `claw_code_cli` runtime labels.
+
 It is meant to travel with the Phase 4 implementation so the code rename and the docs review stay aligned.
 
 ## Constraints that should not regress

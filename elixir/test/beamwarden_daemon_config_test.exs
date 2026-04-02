@@ -3,6 +3,9 @@ defmodule BeamwardenDaemonConfigTest do
 
   setup do
     previous_node = Beamwarden.AppIdentity.get_env(:daemon_node)
+    previous_claw_node = System.get_env("CLAW_DAEMON_NODE")
+    previous_claw_cookie = System.get_env("CLAW_DAEMON_COOKIE")
+    previous_claw_mode = System.get_env("CLAW_DAEMON_NAME_MODE")
     previous_beamwarden_node = System.get_env("BEAMWARDEN_DAEMON_NODE")
     previous_beamwarden_cookie = System.get_env("BEAMWARDEN_DAEMON_COOKIE")
     previous_beamwarden_mode = System.get_env("BEAMWARDEN_DAEMON_NAME_MODE")
@@ -19,6 +22,9 @@ defmodule BeamwardenDaemonConfigTest do
         Beamwarden.AppIdentity.put_env(:daemon_node, previous_node)
       end
 
+      restore_env_var("CLAW_DAEMON_NODE", previous_claw_node)
+      restore_env_var("CLAW_DAEMON_COOKIE", previous_claw_cookie)
+      restore_env_var("CLAW_DAEMON_NAME_MODE", previous_claw_mode)
       restore_env_var("BEAMWARDEN_DAEMON_NODE", previous_beamwarden_node)
       restore_env_var("BEAMWARDEN_DAEMON_COOKIE", previous_beamwarden_cookie)
       restore_env_var("BEAMWARDEN_DAEMON_NAME_MODE", previous_beamwarden_mode)
@@ -34,9 +40,6 @@ defmodule BeamwardenDaemonConfigTest do
 
   test "defaults to shortnames without daemon configuration" do
     Beamwarden.AppIdentity.delete_env(:daemon_node)
-    System.delete_env("CLAW_DAEMON_NODE")
-    System.delete_env("CLAW_DAEMON_COOKIE")
-    System.delete_env("CLAW_DAEMON_NAME_MODE")
     System.delete_env("BEAMWARDEN_DAEMON_NAME_MODE")
 
     assert Beamwarden.Daemon.configured_name_mode() == :shortnames
@@ -56,7 +59,7 @@ defmodule BeamwardenDaemonConfigTest do
     assert Beamwarden.Daemon.configured_name_mode() == :longnames
   end
 
-  test "beamwarden env vars configure daemon runtime labels directly" do
+  test "beamwarden env vars configure daemon runtime" do
     Beamwarden.AppIdentity.delete_env(:daemon_node)
     System.put_env("BEAMWARDEN_DAEMON_NODE", "beamwarden_daemon@new-host")
     System.put_env("BEAMWARDEN_DAEMON_COOKIE", "newcookie")
@@ -67,7 +70,7 @@ defmodule BeamwardenDaemonConfigTest do
     assert Beamwarden.Daemon.configured_name_mode() == :longnames
   end
 
-  test "legacy claw env vars no longer affect daemon configuration" do
+  test "legacy claw env vars are ignored" do
     Beamwarden.AppIdentity.delete_env(:daemon_node)
     System.delete_env("BEAMWARDEN_DAEMON_NODE")
     System.delete_env("BEAMWARDEN_DAEMON_COOKIE")

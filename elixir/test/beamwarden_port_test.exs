@@ -32,7 +32,7 @@ defmodule BeamwardenPortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
-  test "repl launcher messaging stays beamwarden-native" do
+  test "repl launcher messaging points users at beamwarden commands" do
     assert Beamwarden.ReplLauncher.launch_message() =~ "mix beamwarden summary"
     assert Beamwarden.ReplLauncher.build_banner() =~ "mix beamwarden summary"
   end
@@ -277,7 +277,7 @@ defmodule BeamwardenPortTest do
     assert query_route =~ "Matches:"
   end
 
-  test "control plane session lifecycle is exposed via mix beamwarden" do
+  test "control plane session lifecycle is exposed via the beamwarden cli" do
     session_id = "session-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
     on_exit(fn -> maybe_stop_session(session_id) end)
 
@@ -318,7 +318,7 @@ defmodule BeamwardenPortTest do
     assert control_plane =~ session_id
   end
 
-  test "workflow lifecycle is exposed via mix beamwarden" do
+  test "workflow lifecycle is exposed via the beamwarden cli" do
     workflow_name = "port-docs-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =

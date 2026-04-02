@@ -137,6 +137,8 @@ BEAMWARDEN_DAEMON_COOKIE=clawcluster \
 mix beamwarden daemon-status
 ```
 
+Use `BEAMWARDEN_*` env vars for daemon discovery and configuration.
+
 ---
 
 ## Cross-host daemon operation

@@ -6,7 +6,7 @@ defmodule BeamwardenClusterTest do
   setup_all do
     ensure_distributed_node!()
 
-    peer_name = :peer.random_name(~c"claw_peer")
+    peer_name = :peer.random_name(~c"beamwarden_peer")
     peer_args = [~c"-setcookie", Atom.to_charlist(Node.get_cookie()), ~c"-pa" | :code.get_path()]
 
     {:ok, peer, peer_node} = :peer.start_link(%{name: peer_name, args: peer_args})
@@ -90,7 +90,7 @@ defmodule BeamwardenClusterTest do
     if Node.alive?() do
       :ok
     else
-      name = :"claw-test-#{System.unique_integer([:positive])}"
+      name = :"beamwarden-test-#{System.unique_integer([:positive])}"
       {:ok, _pid} = Node.start(name, :shortnames)
       :ok
     end
@@ -99,7 +99,7 @@ defmodule BeamwardenClusterTest do
   defp ensure_peer_started(peer_node) do
     case :rpc.call(peer_node, Beamwarden.AppIdentity, :ensure_started, []) do
       :ok -> :ok
-      {:badrpc, reason} -> raise "failed to start claw_code on #{peer_node}: #{inspect(reason)}"
+      {:badrpc, reason} -> raise "failed to start beamwarden on #{peer_node}: #{inspect(reason)}"
       other -> raise "unexpected peer start result: #{inspect(other)}"
     end
   end

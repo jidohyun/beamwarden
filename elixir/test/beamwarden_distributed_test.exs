@@ -10,7 +10,7 @@ defmodule BeamwardenDistributedTest do
     {:ok, peer: peer}
   end
 
-  test "peer node can bootstrap claw_code and run control-plane status", %{
+  test "peer node can bootstrap beamwarden and run control-plane status", %{
     peer: %{node: peer_node}
   } do
     assert {:ok, output} = :rpc.call(peer_node, Beamwarden.CLI, :run, [["control-plane-status"]])
@@ -104,7 +104,7 @@ defmodule BeamwardenDistributedTest do
     else
       System.cmd("epmd", ["-daemon"])
       host = host_name()
-      name = String.to_atom("claw_code_test_#{System.unique_integer([:positive])}@#{host}")
+      name = String.to_atom("beamwarden_test_#{System.unique_integer([:positive])}@#{host}")
       assert {:ok, _pid} = Node.start(name, :shortnames)
       :ok
     end
@@ -113,7 +113,7 @@ defmodule BeamwardenDistributedTest do
   defp start_peer! do
     {:ok, peer, peer_node} =
       :peer.start_link(%{
-        name: String.to_atom("claw_peer_#{System.unique_integer([:positive])}"),
+        name: String.to_atom("beamwarden_peer_#{System.unique_integer([:positive])}"),
         host: String.to_charlist(host_name()),
         args: [~c"-setcookie", Atom.to_charlist(Node.get_cookie())]
       })

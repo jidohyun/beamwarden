@@ -14,22 +14,22 @@ defmodule BeamwardenAppIdentityTest do
     :ok
   end
 
-  test "runtime app is beamwarden while claw_code remains a legacy fallback" do
+  test "runtime app stays beamwarden while the legacy app hook remains available" do
     assert Beamwarden.AppIdentity.runtime_app() == :beamwarden
     assert Beamwarden.AppIdentity.legacy_app() == :claw_code
   end
 
-  test "compatibility helper prefers beamwarden config while falling back to claw_code" do
+  test "compatibility helper prefers beamwarden config while falling back to the legacy app" do
     assert Beamwarden.AppIdentity.get_env(:daemon_node) == nil
 
     assert :ok =
              Application.put_env(
                Beamwarden.AppIdentity.legacy_app(),
                :daemon_node,
-               "claw_code_daemon@legacy-host"
+               "beamwarden_daemon@legacy-host"
              )
 
-    assert Beamwarden.AppIdentity.get_env(:daemon_node) == "claw_code_daemon@legacy-host"
+    assert Beamwarden.AppIdentity.get_env(:daemon_node) == "beamwarden_daemon@legacy-host"
 
     assert :ok =
              Application.put_env(

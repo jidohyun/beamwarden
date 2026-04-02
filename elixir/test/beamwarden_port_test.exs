@@ -32,22 +32,9 @@ defmodule BeamwardenPortTest do
     assert output =~ "Elixir Porting Workspace Summary"
   end
 
-  test "mix claw compatibility alias runs the same summary surface" do
-    Mix.Task.reenable("claw")
-
-    output =
-      capture_io(fn ->
-        Mix.Tasks.Claw.run(["summary"])
-      end)
-
-    assert output =~ "Elixir Porting Workspace Summary"
-  end
-
-  test "repl launcher messaging prefers beamwarden while keeping claw compatibility" do
+  test "repl launcher messaging stays beamwarden-native" do
     assert Beamwarden.ReplLauncher.launch_message() =~ "mix beamwarden summary"
-    assert Beamwarden.ReplLauncher.launch_message() =~ "mix claw summary"
     assert Beamwarden.ReplLauncher.build_banner() =~ "mix beamwarden summary"
-    assert Beamwarden.ReplLauncher.build_banner() =~ "mix claw summary"
   end
 
   test "app identity helper keeps beamwarden as the live runtime app" do
@@ -290,7 +277,7 @@ defmodule BeamwardenPortTest do
     assert query_route =~ "Matches:"
   end
 
-  test "control plane session lifecycle is exposed via mix claw" do
+  test "control plane session lifecycle is exposed via mix beamwarden" do
     session_id = "session-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
     on_exit(fn -> maybe_stop_session(session_id) end)
 
@@ -331,7 +318,7 @@ defmodule BeamwardenPortTest do
     assert control_plane =~ session_id
   end
 
-  test "workflow lifecycle is exposed via mix claw" do
+  test "workflow lifecycle is exposed via mix beamwarden" do
     workflow_name = "port-docs-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
     start_output =
@@ -375,9 +362,9 @@ defmodule BeamwardenPortTest do
     assert status_output =~ "[completed] 1"
   end
 
-  test "mix claw surfaces non-zero exit code for failures" do
+  test "mix beamwarden surfaces non-zero exit code for failures" do
     {_output, status} =
-      System.cmd("mix", ["claw", "show-tool", "DefinitelyMissingTool"],
+      System.cmd("mix", ["beamwarden", "show-tool", "DefinitelyMissingTool"],
         cd: Path.expand("..", __DIR__)
       )
 

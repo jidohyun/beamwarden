@@ -4,9 +4,9 @@ defmodule BeamwardenDaemonModeTest do
   setup do
     ensure_distributed_node!()
 
-    daemon = start_peer!("claw_daemon_server")
-    client_a = start_peer!("claw_daemon_client")
-    client_b = start_peer!("claw_daemon_client")
+    daemon = start_peer!("beamwarden_daemon_server")
+    client_a = start_peer!("beamwarden_daemon_client")
+    client_b = start_peer!("beamwarden_daemon_client")
 
     daemon_label = Atom.to_string(daemon.node)
     cookie = Atom.to_string(Node.get_cookie())
@@ -116,7 +116,7 @@ defmodule BeamwardenDaemonModeTest do
     if Node.alive?() do
       :ok
     else
-      name = :"claw-daemon-mode-#{System.unique_integer([:positive])}"
+      name = :"beamwarden-daemon-mode-#{System.unique_integer([:positive])}"
       {:ok, _pid} = Node.start(name, :shortnames)
       :ok
     end

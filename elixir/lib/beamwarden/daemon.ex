@@ -3,8 +3,8 @@ defmodule Beamwarden.Daemon do
 
   alias Beamwarden.Cluster
 
-  @client_prefix "claw_code_cli"
-  @default_server_name "claw_code_daemon"
+  @client_prefix "beamwarden_cli"
+  @default_server_name "beamwarden_daemon"
   @default_name_mode :shortnames
 
   def preflight(args) do
@@ -95,7 +95,7 @@ defmodule Beamwarden.Daemon do
 
   def block_forever do
     receive do
-      {:claw_code, :stop_daemon} -> :ok
+      {:beamwarden, :stop_daemon} -> :ok
     after
       :infinity -> :ok
     end
@@ -165,12 +165,12 @@ defmodule Beamwarden.Daemon do
 
   def configured_node_label do
     Beamwarden.AppIdentity.get_env(:daemon_node) ||
-      preferred_env("BEAMWARDEN_DAEMON_NODE", "CLAW_DAEMON_NODE")
+      System.get_env("BEAMWARDEN_DAEMON_NODE")
   end
 
   def daemon_cookie do
     Beamwarden.AppIdentity.get_env(:daemon_cookie) ||
-      preferred_env("BEAMWARDEN_DAEMON_COOKIE", "CLAW_DAEMON_COOKIE")
+      System.get_env("BEAMWARDEN_DAEMON_COOKIE")
   end
 
   def configured_name_mode do
@@ -340,14 +340,10 @@ defmodule Beamwarden.Daemon do
   end
 
   defp longname_env? do
-    case preferred_env("BEAMWARDEN_DAEMON_NAME_MODE", "CLAW_DAEMON_NAME_MODE") do
+    case System.get_env("BEAMWARDEN_DAEMON_NAME_MODE") do
       value when value in ["long", "longname", "longnames"] -> true
       _ -> false
     end
-  end
-
-  defp preferred_env(primary, fallback) do
-    System.get_env(primary) || System.get_env(fallback)
   end
 
   defp longname_label?(nil), do: false

@@ -43,7 +43,7 @@ defmodule BeamwardenDaemonFailoverTest do
     if Node.alive?() do
       :ok
     else
-      name = :"claw-daemon-fallback-#{System.unique_integer([:positive])}"
+      name = :"beamwarden-daemon-fallback-#{System.unique_integer([:positive])}"
       {:ok, _pid} = Node.start(name, :shortnames)
       :ok
     end

@@ -142,7 +142,7 @@ defmodule BeamwardenClusterDurabilityTest do
     if Node.alive?() do
       :ok
     else
-      name = :"claw-durability-#{System.unique_integer([:positive])}"
+      name = :"beamwarden-durability-#{System.unique_integer([:positive])}"
       {:ok, _pid} = Node.start(name, :shortnames)
       :ok
     end
@@ -151,7 +151,7 @@ defmodule BeamwardenClusterDurabilityTest do
   defp start_peer! do
     {:ok, peer, peer_node} =
       :peer.start_link(%{
-        name: String.to_atom("claw_peer_#{System.unique_integer([:positive])}"),
+        name: String.to_atom("beamwarden_peer_#{System.unique_integer([:positive])}"),
         host: String.to_charlist(host_name()),
         args: [~c"-setcookie", Atom.to_charlist(Node.get_cookie())]
       })

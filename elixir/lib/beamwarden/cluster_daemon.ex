@@ -5,9 +5,9 @@ defmodule Beamwarden.ClusterDaemon do
 
   alias Beamwarden.Cluster
 
-  @ets_table :claw_code_cluster_claims
-  @dets_table :claw_code_cluster_ledger
-  @runtime_dets_table :claw_code_cluster_runtime
+  @ets_table :beamwarden_cluster_claims
+  @dets_table :beamwarden_cluster_ledger
+  @runtime_dets_table :beamwarden_cluster_runtime
   @lease_ttl_ms 15_000
 
   def start_link(opts \\ []) do

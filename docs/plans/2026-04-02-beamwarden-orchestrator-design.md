@@ -235,6 +235,121 @@ This is where Beamwarden should eventually outperform a tmux-only approach.
 tmux only gives same-machine concurrency.
 Beamwarden orchestration should become a **BEAM-distributed worker system**.
 
+## Phase 4 design baseline: preserve the current local contract
+
+Phase 4 should extend the current runtime, not replace it.
+The design has to stay grounded in the Beamwarden surface that already exists today:
+
+- `run-status` already distinguishes active runtime state from persisted stale evidence
+- `worker-list` already distinguishes active workers from persisted-only snapshots
+- `logs --follow` currently replays persisted events first, then streams newly persisted events
+- `cleanup-state` and `cleanup-runs` already avoid deleting data for active runs
+
+That means Phase 4 should treat the current local runtime as the source of truth for naming and operator expectations, then add stronger distributed semantics around it.
+
+## Phase 4 design: live broker, lifecycle semantics, and lease-aware retention
+
+Phase 4 should do three linked things together.
+Trying to ship any one of them in isolation will produce confusing operator output.
+
+### A. True live log broker semantics
+
+Today `logs --follow` is honest but limited:
+
+- it replays persisted orchestration events
+- it emits `follow=streaming`
+- it polls for newly persisted events
+
+That is a good Phase 3 contract, but it is **not** a true live broker.
+
+Phase 4 should introduce a broker-backed event stream with these semantics:
+
+- every event gets a monotonically increasing `event_seq` within a run
+- the broker can serve **backlog + live subscription** from one cursor
+- follow clients subscribe from `event_seq=N` instead of re-reading whole files
+- the broker tags event source explicitly:
+  - `source=replay` for persisted backlog
+  - `source=live` for broker-delivered events that have not yet needed replay
+  - `source=recovered` for events reconstructed after restart/failover
+- worker stdout/stderr forwarding, if enabled later, stays a separate event class from orchestration lifecycle events
+
+Recommended shape:
+
+- `Beamwarden.LogBroker` owns per-run subscriptions
+- `Beamwarden.EventStore.append/2` remains the durability path
+- the broker receives the event first-class, publishes it immediately, then lets the event store persist it
+- follow clients ask for `{from_seq, include_backlog?: true}` so the CLI gets one consistent cursor model
+
+This keeps the current CLI honest while letting Beamwarden move beyond persisted-event polling.
+
+### B. Stronger multi-node lifecycle semantics
+
+The current runtime has useful local notions (`active`, persisted-only, stale runtime), but Phase 4 needs a distributed lifecycle model that makes ownership and recovery explicit.
+
+Use three orthogonal dimensions instead of one overloaded status field:
+
+1. **execution status** — `pending | running | completed | failed | cancelled`
+2. **liveness** — `active | stale | expired`
+3. **recovery state** — `original | recovered | requeued`
+
+Recommended worker lifecycle:
+
+- `active` — worker heartbeat is current and its lease is valid on the owning node
+- `stale` — worker missed heartbeat / owning node may be unhealthy, but lease grace period is still open
+- `expired` — worker lease has lapsed and the worker no longer owns the task
+- `recovered` — a replacement worker/run process adopted persisted state after a restart/failover
+
+Recommended run lifecycle additions:
+
+- keep top-level run statuses small (`running`, `completed`, `failed`, `cancelled`)
+- add explicit metadata instead of inventing more terminal statuses:
+  - `authority_node`
+  - `lease_epoch`
+  - `stale_reason`
+  - `recovery_count`
+  - `last_lease_renewed_at`
+
+Task ownership should be lease-backed:
+
+- `assigned_worker_id`
+- `assigned_node`
+- `lease_owner`
+- `lease_epoch`
+- `lease_expires_at`
+- `recovered_from_attempt`
+
+That gives Beamwarden enough structure to explain why work is still active, merely stale, already expired, or explicitly recovered.
+
+### C. Lease-aware cleanup and retention
+
+Cleanup cannot stay "timestamp only" once work spans nodes.
+
+Phase 4 retention should be driven by **terminal state + lease state + grace windows**:
+
+- never delete run, worker, or event artifacts for work with an active lease
+- do not delete stale artifacts until the stale grace window expires
+- only delete expired artifacts after:
+  - the task/run is terminal or requeued elsewhere
+  - the owning lease epoch is no longer authoritative
+  - the retention floor for audit/debug evidence has passed
+
+Recommended retention tiers:
+
+- **hot**: live broker cache, in-memory subscriptions, recent heartbeats
+- **warm**: persisted run/worker/task snapshots and full event history for recoverable work
+- **cold**: summarized event/output history retained after terminal completion
+- **purgeable**: orphaned event files or worker snapshots that have no active lease and are past retention
+
+Recommended cleanup rules:
+
+1. active lease -> skip deletion
+2. stale lease -> keep, label as stale, emit no destructive cleanup yet
+3. expired but unrecovered -> keep until requeue/recovery decision is written
+4. recovered + superseded epoch -> eligible for warm/cold retention downgrade
+5. terminal + retention elapsed -> delete warm artifacts, optionally keep compact audit summary
+
+This is what lets cleanup stay safe without leaking state forever.
+
 ## Recovery model
 
 ### Persisted state

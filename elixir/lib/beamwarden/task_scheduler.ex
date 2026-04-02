@@ -160,8 +160,7 @@ defmodule Beamwarden.TaskScheduler do
       tasks == [] ->
         if lifecycle in [:cancel_requested, :cancelled], do: "cancelled", else: "pending"
 
-      lifecycle == :cancel_requested or
-          Enum.any?(tasks, &(value(&1, :status) == "cancel_requested")) ->
+      lifecycle == :cancel_requested or Enum.any?(tasks, &(value(&1, :status) == "cancel_requested")) ->
         "cancelling"
 
       lifecycle == :cancelled and terminal?(tasks) ->

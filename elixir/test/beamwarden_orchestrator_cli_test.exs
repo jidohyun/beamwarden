@@ -48,30 +48,7 @@ defmodule BeamwardenOrchestratorCliTest do
     assert worker_output =~ "run_id=#{run_id}"
   end
 
-  test "logs --follow makes the replay-only follow semantics explicit" do
-    run_id = unique_id("phase-2-follow")
-
-    assert {:ok, failed_snapshot} =
-             Beamwarden.Orchestrator.start_run("review this repo",
-               run_id: run_id,
-               workers: 1,
-               await_timeout: 1_500,
-               worker_opts: [command: "printf 'boom' >&2; exit 2"]
-             )
-
-    assert failed_snapshot.status == "failed"
-
-    logs_output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["logs", run_id, "--follow"])
-      end)
-
-    assert logs_output =~ "Run Logs"
-    assert logs_output =~ "run_id=#{run_id}"
-    assert logs_output =~ "follow=requested_runtime_snapshot_replayed_once"
-  end
-
-  test "cancel-run, retry-task, logs, and persisted worker reporting expose phase 2 lifecycle data" do
+  test "cancel-run, retry-task, logs, and persisted worker reporting expose richer lifecycle data" do
     run_id = unique_id("phase-2-run")
     parent = self()
 

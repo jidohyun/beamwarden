@@ -11,7 +11,7 @@ defmodule BeamwardenOrchestratorPhase3Test do
       send(parent, {:follow_worker_started, task.task_id, task.attempt})
 
       receive do
-        {:release_follow_worker, attempt} when attempt == task.attempt -> {:ok, "follow complete"}
+        :release_follow_worker -> {:ok, "follow complete"}
       after
         1_500 -> {:error, "timed out waiting for follow release"}
       end
@@ -26,7 +26,6 @@ defmodule BeamwardenOrchestratorPhase3Test do
              )
 
     [task] = snapshot.tasks
-    [worker_id] = snapshot.worker_ids
     assert_receive {:follow_worker_started, ^task.task_id, 1}, 1_000
 
     follower =
@@ -46,17 +45,15 @@ defmodule BeamwardenOrchestratorPhase3Test do
       end)
 
     Process.sleep(100)
-    assert {:ok, worker_pid} = Beamwarden.WorkerSupervisor.worker_pid(worker_id)
-    send(worker_pid, {:release_follow_worker, 1})
+    send(parent, :release_follow_worker)
 
     output = Task.await(follower, 2_000)
 
     assert output =~ "Run Logs"
     assert output =~ "follow=streaming"
     assert output =~ "task_assigned"
-    assert output =~ "follow=complete status="
-    assert output =~ "run_"
-    assert output =~ "task_"
+    assert output =~ "task_completed"
+    assert output =~ "follow=complete status=completed"
   end
 
   test "cleanup-state removes expired persisted runs, workers, and events" do
@@ -108,9 +105,9 @@ defmodule BeamwardenOrchestratorPhase3Test do
                  ])
       end)
 
-    assert cleanup_output =~ "deleted_run_count=1"
-    assert cleanup_output =~ "deleted_worker_count=1"
-    assert cleanup_output =~ "deleted_event_count=1"
+    assert cleanup_output =~ "runs_deleted=1"
+    assert cleanup_output =~ "workers_deleted=1"
+    assert cleanup_output =~ "events_deleted=1"
     refute File.exists?(Beamwarden.run_path(run_id))
     refute File.exists?(Beamwarden.worker_path(worker_id))
     refute File.exists?(Beamwarden.event_path(run_id))

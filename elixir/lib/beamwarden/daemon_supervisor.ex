@@ -12,7 +12,8 @@ defmodule Beamwarden.DaemonSupervisor do
     children = [
       {Beamwarden.ClusterSupervisor, []},
       {Beamwarden.DaemonNodeMonitor, []},
-      {Beamwarden.ControlPlaneSupervisor, []}
+      {Beamwarden.ControlPlaneSupervisor, []},
+      {Beamwarden.OrchestratorSupervisor, []}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

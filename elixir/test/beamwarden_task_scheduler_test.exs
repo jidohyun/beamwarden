@@ -1,34 +1,29 @@
 defmodule BeamwardenTaskSchedulerTest do
   use ExUnit.Case, async: true
 
-  test "build_tasks creates at least one task and annotates multi-worker titles" do
-    single = Beamwarden.TaskScheduler.build_tasks("review repo", 1)
-    multi = Beamwarden.TaskScheduler.build_tasks("review repo", 2)
+  test "initial_tasks splits prompt and tracks task transitions" do
+    tasks = Beamwarden.TaskScheduler.initial_tasks("run-123", "review repo || propose fixes")
 
-    assert length(single) == 1
-    assert hd(single).title == "review repo"
+    assert Enum.map(tasks, & &1.task_id) == ["1", "2"]
+    assert Enum.map(tasks, & &1.status) == ["pending", "pending"]
 
-    assert Enum.map(multi, & &1.id) == ["1", "2"]
-    assert Enum.all?(multi, &String.contains?(&1.title, "review repo"))
-    assert Enum.at(multi, 0).title =~ "[1/2]"
-    assert Enum.at(multi, 1).title =~ "[2/2]"
-  end
+    {task, tasks} = Beamwarden.TaskScheduler.assign_next_task(tasks, "worker-1")
+    assert task.task_id == "1"
+    assert task.status == "running"
+    assert task.assigned_worker == "worker-1"
 
-  test "assignment and completion update task counts" do
-    tasks =
-      "demo"
-      |> Beamwarden.TaskScheduler.build_tasks(2)
-      |> Beamwarden.TaskScheduler.assign_task("1", "worker-1")
-      |> Beamwarden.TaskScheduler.complete_task("1", "done")
-      |> Beamwarden.TaskScheduler.fail_task("2", "boom")
+    tasks = Beamwarden.TaskScheduler.finish_task(tasks, "1", "worker-1", {:ok, "done"})
+    counts = Beamwarden.TaskScheduler.counts(tasks)
 
-    assert Beamwarden.TaskScheduler.next_pending_task(tasks) == nil
+    assert counts.completed_count == 1
+    assert counts.pending_count == 1
+    refute Beamwarden.TaskScheduler.terminal?(tasks)
+    assert Beamwarden.TaskScheduler.run_status(tasks) == "running"
 
-    assert Beamwarden.TaskScheduler.counts(tasks) == %{
-             pending: 0,
-             running: 0,
-             completed: 1,
-             failed: 1
-           }
+    tasks = Beamwarden.TaskScheduler.finish_task(tasks, "2", "worker-2", {:error, "boom"})
+
+    assert Beamwarden.TaskScheduler.terminal?(tasks)
+    assert Beamwarden.TaskScheduler.run_status(tasks) == "failed"
+    assert Enum.find(tasks, &(&1.task_id == "2")).error == "boom"
   end
 end

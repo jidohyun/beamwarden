@@ -12,8 +12,8 @@ defmodule Beamwarden.OrchestratorSupervisor do
     children = [
       {Registry, keys: :unique, name: Beamwarden.RunRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: Beamwarden.RunSupervisor},
-      {Registry, keys: :unique, name: Beamwarden.OrchestratorWorkerRegistry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Beamwarden.WorkerSupervisor}
+      {Registry, keys: :unique, name: Beamwarden.WorkerRegistry},
+      {Beamwarden.WorkerSupervisor, []}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

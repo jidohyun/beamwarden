@@ -113,6 +113,36 @@ defmodule Beamwarden.CLI do
     Beamwarden.Daemon.stop_server()
   end
 
+  def run_local(["run", prompt | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [workers: :integer])
+
+    case Beamwarden.RunServer.start_run(prompt, workers: opts[:workers] || 1) do
+      {:ok, snapshot} -> {:ok, render_run(snapshot)}
+      {:error, reason} -> {:error, "Failed to start run: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["run-status", run_id]) do
+    case Registry.lookup(Beamwarden.RunRegistry, run_id) do
+      [{_pid, _value}] -> {:ok, Beamwarden.RunServer.snapshot(run_id) |> render_run()}
+      [] -> {:error, "Run not found: #{run_id}"}
+    end
+  end
+
+  def run_local(["task-list", run_id]) do
+    case Registry.lookup(Beamwarden.RunRegistry, run_id) do
+      [{_pid, _value}] ->
+        {:ok, Beamwarden.RunServer.list_tasks(run_id) |> render_task_list(run_id)}
+
+      [] ->
+        {:error, "Run not found: #{run_id}"}
+    end
+  end
+
+  def run_local(["worker-list"]) do
+    {:ok, Beamwarden.ExternalWorker.list_workers() |> render_worker_list()}
+  end
+
   def run_local(["session-start", session_id]) do
     with {:ok, _pid} <- Beamwarden.ControlPlane.ensure_session(session_id),
          {:ok, snapshot} <- Beamwarden.ControlPlane.session_snapshot(session_id) do
@@ -549,6 +579,75 @@ defmodule Beamwarden.CLI do
     [title <> " Snapshot", "", JSON.encode!(snapshot)]
     |> Enum.join("
 ")
+  end
+
+  defp render_run(snapshot) when is_map(snapshot) do
+    [
+      "Run Summary",
+      "",
+      "run_id=#{snapshot.run_id}",
+      "status=#{snapshot.status}",
+      "task_count=#{snapshot.task_count}",
+      "pending_count=#{snapshot.pending_count}",
+      "running_count=#{snapshot.running_count}",
+      "completed_count=#{snapshot.completed_count}",
+      "failed_count=#{snapshot.failed_count}",
+      "worker_count=#{snapshot.worker_count}",
+      "last_update=#{snapshot.updated_at}"
+    ]
+    |> Enum.join("
+")
+  end
+
+  defp render_task_list(tasks, run_id) do
+    [
+      "Task List",
+      "",
+      "run_id=#{run_id}",
+      "tasks:",
+      Enum.map(tasks, &task_status_line/1)
+    ]
+    |> List.flatten()
+    |> Enum.join("
+")
+  end
+
+  defp render_worker_list([]) do
+    Enum.join(["Worker List", "", "No workers"], "
+")
+  end
+
+  defp render_worker_list(workers) do
+    [
+      "Worker List",
+      "",
+      Enum.map(workers, &worker_status_line/1)
+    ]
+    |> List.flatten()
+    |> Enum.join("
+")
+  end
+
+  defp task_status_line(task) do
+    detail = task.result_summary || task.error
+
+    [
+      "[#{task.status}] #{task.task_id} — #{task.title}",
+      "worker=#{task.assigned_worker || "none"}",
+      if(detail, do: "detail=#{detail}", else: nil)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
+  end
+
+  defp worker_status_line(worker) do
+    [
+      "worker=#{worker.worker_id}",
+      "run_id=#{worker.run_id}",
+      "state=#{worker.state}",
+      "current_task_id=#{worker.current_task_id || "none"}"
+    ]
+    |> Enum.join(" ")
   end
 
   defp render_cluster_action(title, result) do

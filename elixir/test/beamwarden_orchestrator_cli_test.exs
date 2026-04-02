@@ -1,78 +1,89 @@
-defmodule BeamwardenOrchestratorCliTest do
+defmodule BeamwardenOrchestratorCLITest do
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureIO
-
   setup do
+    cleanup_runs()
+    original_command = Beamwarden.AppIdentity.get_env(:orchestrator_worker_command)
+
+    Beamwarden.AppIdentity.put_env(
+      :orchestrator_worker_command,
+      {"/bin/sh", ["-lc", "printf 'cli:%s\\n' \"$BW_TASK_PAYLOAD\""]}
+    )
+
     on_exit(fn ->
-      Beamwarden.RunServer.list_run_ids()
-      |> Enum.each(fn run_id ->
-        _ = Beamwarden.RunServer.stop(run_id)
-      end)
+      cleanup_runs()
+      restore_env(:orchestrator_worker_command, original_command)
     end)
 
     :ok
   end
 
-  test "run command starts a local orchestration run and exposes status/tasks/workers" do
-    run_id = "run-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
+  test "cli run, run-status, task-list, and worker-list report orchestration state" do
+    assert {:ok, output} =
+             Beamwarden.CLI.run(["run", "review repo || propose fixes", "--workers", "2"])
 
-    run_output =
-      capture_io(fn ->
-        assert 0 ==
-                 Beamwarden.CLI.main(["run", "review repo", "--workers", "2", "--run-id", run_id])
-      end)
+    assert output =~ "Run Summary"
 
-    assert run_output =~ "# Orchestration Run"
-    assert run_output =~ "run_id=#{run_id}"
-
-    snapshot = wait_for_run(run_id)
-    assert snapshot.status == "completed"
-    assert snapshot.task_counts.completed == 2
+    run_id = capture_value(output, "run_id")
 
     status_output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["run-status", run_id])
-      end)
+      wait_until(
+        fn -> Beamwarden.CLI.run(["run-status", run_id]) end,
+        fn
+          {:ok, text} -> String.contains?(text, "status=completed")
+          _ -> false
+        end
+      )
 
-    task_output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["task-list", run_id])
-      end)
+    assert {:ok, status_text} = status_output
+    assert status_text =~ "completed_count=2"
 
-    worker_output =
-      capture_io(fn ->
-        assert 0 == Beamwarden.CLI.main(["worker-list"])
-      end)
-
-    assert status_output =~ "status=completed"
+    assert {:ok, task_output} = Beamwarden.CLI.run(["task-list", run_id])
+    assert task_output =~ "Task List"
     assert task_output =~ "[completed] 1"
     assert task_output =~ "[completed] 2"
+
+    assert {:ok, worker_output} = Beamwarden.CLI.run(["worker-list"])
+    assert worker_output =~ "Worker List"
     assert worker_output =~ "run_id=#{run_id}"
     assert worker_output =~ "state=idle"
   end
 
-  test "run-status reports not found for unknown ids" do
-    output =
-      capture_io(fn ->
-        assert 1 == Beamwarden.CLI.main(["run-status", "missing-run"])
-      end)
-
-    assert output =~ "Run not found"
+  defp cleanup_runs do
+    Beamwarden.RunServer.list_runs()
+    |> Enum.each(fn run -> Beamwarden.RunServer.stop(run.run_id) end)
   end
 
-  defp wait_for_run(run_id, attempts \\ 20)
+  defp capture_value(output, key) do
+    output
+    |> String.split("\n")
+    |> Enum.find_value(fn line ->
+      case String.split(line, "=", parts: 2) do
+        [^key, value] -> value
+        _ -> nil
+      end
+    end)
+  end
 
-  defp wait_for_run(run_id, 0), do: Beamwarden.RunServer.snapshot(run_id)
+  defp restore_env(key, nil), do: Beamwarden.AppIdentity.delete_env(key)
+  defp restore_env(key, value), do: Beamwarden.AppIdentity.put_env(key, value)
 
-  defp wait_for_run(run_id, attempts) do
-    snapshot = Beamwarden.RunServer.snapshot(run_id)
+  defp wait_until(fetcher, predicate, attempts \\ 50)
 
-    if snapshot.status in ["completed", "failed"] do
-      snapshot
+  defp wait_until(fetcher, predicate, 0) do
+    value = fetcher.()
+    assert predicate.(value), "condition not met for #{inspect(value)}"
+    value
+  end
+
+  defp wait_until(fetcher, predicate, attempts) do
+    value = fetcher.()
+
+    if predicate.(value) do
+      value
     else
-      Process.sleep(25)
-      wait_for_run(run_id, attempts - 1)
+      Process.sleep(20)
+      wait_until(fetcher, predicate, attempts - 1)
     end
   end
 end

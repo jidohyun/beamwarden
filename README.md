@@ -29,7 +29,7 @@ It is a **clean-room porting project** focused on:
 - daemon-first runtime control
 - recovery and multi-node control-plane behavior on the BEAM
 
-The current repository is best understood as:
+The repository is best understood as:
 
 - **Elixir** = primary implementation workspace
 - **Python** = archived structural mirror kept for comparison/reference
@@ -115,11 +115,13 @@ cd elixir
 mix beamwarden summary
 mix beamwarden manifest
 mix beamwarden setup-report
-mix beamwarden bootstrap "review MCP tool"
 mix beamwarden daemon-status
 mix beamwarden control-plane-status
 mix beamwarden cluster-status
+mix beamwarden bootstrap "review MCP tool"
 mix beamwarden run "review this repo and propose fixes" --workers 2
+mix beamwarden worker-list
+mix beamwarden task-list <run-id>
 mix beamwarden retry-task <run-id> <task-id>
 mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
@@ -174,7 +176,7 @@ BEAMWARDEN_DAEMON_NAME_MODE=longnames \
 mix beamwarden daemon-status
 ```
 
-See the full operator guides:
+See the operator guides:
 
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
@@ -184,7 +186,7 @@ See the full operator guides:
 
 ## Important docs
 
-Start here if you want to understand the current system:
+Start here for the current system:
 
 - `docs/elixir-control-plane-overview.md`
 - `docs/elixir-cluster-daemon-review.md`

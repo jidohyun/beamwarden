@@ -199,7 +199,10 @@ defmodule Beamwarden.Daemon do
           "run",
           "run-status",
           "task-list",
-          "worker-list"
+          "retry-task",
+          "cancel-run",
+          "worker-list",
+          "logs"
         ]
 
       _ ->

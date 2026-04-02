@@ -49,6 +49,10 @@ defmodule Beamwarden do
     Path.join(session_root(), "workers")
   end
 
+  def event_root do
+    Path.join(session_root(), "events")
+  end
+
   def cluster_root do
     Path.join(session_root(), "cluster")
   end
@@ -99,5 +103,9 @@ defmodule Beamwarden do
 
   def worker_path(worker_id) do
     Path.join(worker_root(), "#{worker_id}.json")
+  end
+
+  def event_path(run_id) do
+    Path.join(event_root(), "#{run_id}.jsonl")
   end
 end

@@ -10,6 +10,7 @@ defmodule Beamwarden.TaskScheduler do
         run_id: run_id,
         title: summarize_prompt(prompt),
         payload: prompt,
+        attempt: 1,
         status: "pending",
         assigned_worker: nil,
         result_summary: nil,
@@ -60,10 +61,65 @@ defmodule Beamwarden.TaskScheduler do
     end)
   end
 
-  def status(tasks, worker_count) do
+  def cancel_running_tasks(tasks) do
+    {updated, cancelled_count} =
+      Enum.map_reduce(tasks, 0, fn task, cancelled_count ->
+        status = value(task, :status)
+
+        if status in ["pending", "in_progress"] do
+          {
+            normalize(task)
+            |> put(:status, "cancelled")
+            |> put(:result_summary, nil)
+            |> put(:error, nil)
+            |> put(:updated_at, now()),
+            cancelled_count + 1
+          }
+        else
+          {normalize(task), cancelled_count}
+        end
+      end)
+
+    {updated, cancelled_count}
+  end
+
+  def retry_task(tasks, task_id) do
+    case Enum.find(tasks, &(value(&1, :task_id) == task_id)) do
+      nil ->
+        {:error, :not_found}
+
+      task ->
+        if value(task, :status) in ["failed", "cancelled"] do
+          retried_task =
+            normalize(task)
+            |> put(:attempt, (value(task, :attempt) || 1) + 1)
+            |> put(:status, "pending")
+            |> put(:assigned_worker, nil)
+            |> put(:result_summary, nil)
+            |> put(:error, nil)
+            |> put(:updated_at, now())
+
+          updated =
+            update_task(tasks, task_id, fn _current ->
+              retried_task
+            end)
+
+          {:ok, retried_task, updated}
+        else
+          {:error, :not_retryable}
+        end
+    end
+  end
+
+  def status(tasks, worker_count, opts \\ []) do
+    lifecycle = Keyword.get(opts, :lifecycle, :active)
+
     cond do
       tasks == [] ->
-        "pending"
+        if lifecycle == :cancelled, do: "cancelled", else: "pending"
+
+      lifecycle == :cancelled and terminal?(tasks) ->
+        "cancelled"
 
       Enum.any?(tasks, &(value(&1, :status) == "failed")) and terminal?(tasks) ->
         "failed"
@@ -88,12 +144,14 @@ defmodule Beamwarden.TaskScheduler do
       pending_count: Enum.count(tasks, &(value(&1, :status) == "pending")),
       running_count: Enum.count(tasks, &(value(&1, :status) == "in_progress")),
       completed_count: Enum.count(tasks, &(value(&1, :status) == "completed")),
-      failed_count: Enum.count(tasks, &(value(&1, :status) == "failed"))
+      failed_count: Enum.count(tasks, &(value(&1, :status) == "failed")),
+      cancelled_count: Enum.count(tasks, &(value(&1, :status) == "cancelled"))
     }
   end
 
   def terminal?(tasks) do
-    tasks != [] and Enum.all?(tasks, &(value(&1, :status) in ["completed", "failed"]))
+    tasks != [] and
+      Enum.all?(tasks, &(value(&1, :status) in ["completed", "failed", "cancelled"]))
   end
 
   defp update_task(tasks, task_id, updater) do
@@ -119,6 +177,7 @@ defmodule Beamwarden.TaskScheduler do
       run_id: value(task, :run_id),
       title: value(task, :title),
       payload: value(task, :payload),
+      attempt: value(task, :attempt) || 1,
       status: value(task, :status),
       assigned_worker: value(task, :assigned_worker),
       result_summary: value(task, :result_summary),

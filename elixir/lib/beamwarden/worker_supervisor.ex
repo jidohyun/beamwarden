@@ -43,9 +43,23 @@ defmodule Beamwarden.WorkerSupervisor do
       Beamwarden.WorkerStore.list(run_id: run_id)
       |> Map.new(fn snapshot -> {value(snapshot, :worker_id), snapshot} end)
 
-    persisted
-    |> Map.merge(live)
-    |> Map.values()
+    Map.keys(Map.merge(persisted, live))
+    |> Enum.map(fn worker_id ->
+      live_snapshot = Map.get(live, worker_id)
+      persisted_snapshot = Map.get(persisted, worker_id)
+      preferred = live_snapshot || persisted_snapshot || %{}
+
+      preferred
+      |> Map.put(:worker_id, worker_id)
+      |> Map.put(:presence, if(is_map(live_snapshot), do: "active", else: "persisted"))
+      |> Map.put(:active, is_map(live_snapshot))
+      |> Map.put(:runtime_state, value(live_snapshot, :state))
+      |> Map.put(:persisted_state, value(persisted_snapshot, :state))
+      |> Map.put(
+        :last_task_status,
+        value(preferred, :last_task_status) || value(persisted_snapshot, :last_task_status)
+      )
+    end)
     |> Enum.sort_by(&value(&1, :worker_id))
   end
 
@@ -59,6 +73,13 @@ defmodule Beamwarden.WorkerSupervisor do
       is_nil(run_id) or value(snapshot, :run_id) == run_id
     end)
     |> Enum.sort_by(&value(&1, :worker_id))
+  end
+
+  def worker_pid(worker_id) do
+    case Registry.lookup(Beamwarden.ExternalWorkerRegistry, worker_id) do
+      [{pid, _value} | _] -> {:ok, pid}
+      [] -> :error
+    end
   end
 
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))

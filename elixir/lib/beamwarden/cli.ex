@@ -96,6 +96,66 @@ defmodule Beamwarden.CLI do
     end
   end
 
+  def run_local(["retry-task", run_id, task_id]) do
+    case Beamwarden.Orchestrator.retry_task(run_id, task_id) do
+      {:ok, snapshot} ->
+        {:ok, Beamwarden.Orchestrator.render_run(snapshot)}
+
+      {:error, :not_found} ->
+        {:error, "Run not found: #{run_id}"}
+
+      {:error, :not_running} ->
+        {:error, "Run is not active: #{run_id}"}
+
+      {:error, :not_retryable} ->
+        {:error, "Task is not retryable: #{task_id}"}
+
+      {:error, reason} ->
+        {:error, "Failed to retry task: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["cancel-run", run_id]) do
+    case Beamwarden.Orchestrator.cancel_run(run_id) do
+      {:ok, snapshot} ->
+        {:ok, Beamwarden.Orchestrator.render_run(snapshot)}
+
+      {:error, :not_found} ->
+        {:error, "Run not found: #{run_id}"}
+
+      {:error, :not_running} ->
+        {:error, "Run is not active: #{run_id}"}
+
+      {:error, :not_cancelable} ->
+        {:error, "Run has no cancellable tasks: #{run_id}"}
+
+      {:error, reason} ->
+        {:error, "Failed to cancel run: #{inspect(reason)}"}
+    end
+  end
+
+  def run_local(["logs", run_id | rest]) do
+    {opts, _, _} = OptionParser.parse(rest, strict: [follow: :boolean])
+
+    case Beamwarden.Orchestrator.logs(run_id) do
+      {:ok, events} ->
+        output =
+          Beamwarden.Orchestrator.render_logs(run_id, events) <>
+            if(opts[:follow],
+              do: "\nfollow=not_implemented_showing_persisted_events_only",
+              else: ""
+            )
+
+        {:ok, output}
+
+      {:error, :not_found} ->
+        {:error, "Run not found: #{run_id}"}
+
+      {:error, reason} ->
+        {:error, "Failed to load logs: #{inspect(reason)}"}
+    end
+  end
+
   def run_local(["worker-list"]) do
     {:ok, Beamwarden.Orchestrator.worker_list() |> Beamwarden.Orchestrator.render_workers()}
   end

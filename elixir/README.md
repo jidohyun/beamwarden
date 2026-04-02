@@ -66,6 +66,11 @@ mix beamwarden summary
 mix beamwarden manifest
 mix beamwarden control-plane-status
 mix beamwarden cluster-status
+mix beamwarden run "review this repo" --workers 2
+mix beamwarden worker-list
+mix beamwarden logs <run-id>
+mix beamwarden cancel-run <run-id>
+mix beamwarden retry-task <run-id> <task-id>
 mix beamwarden start-workflow smoke-flow "Update README" "Update docs"
 mix beamwarden workflow-status smoke-flow
 ```

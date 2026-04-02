@@ -10,6 +10,7 @@ defmodule BeamwardenTaskSchedulerTest do
         run_id: "run-1",
         title: "first",
         payload: "first",
+        attempt: 1,
         status: "pending",
         assigned_worker: nil,
         result_summary: nil,
@@ -22,6 +23,7 @@ defmodule BeamwardenTaskSchedulerTest do
         run_id: "run-1",
         title: "second",
         payload: "second",
+        attempt: 1,
         status: "pending",
         assigned_worker: nil,
         result_summary: nil,
@@ -64,5 +66,21 @@ defmodule BeamwardenTaskSchedulerTest do
 
     assert TaskScheduler.counts(failed).failed_count == 1
     assert TaskScheduler.status(failed, 1) == "failed"
+  end
+
+  test "cancel_running_tasks and retry_task expose lifecycle transitions" do
+    tasks = TaskScheduler.build_initial_tasks("run-4", "review this repo")
+    assert {:ok, task, tasks} = TaskScheduler.assign_next_task(tasks, "worker-1")
+
+    {cancelled, cancelled_count} = TaskScheduler.cancel_running_tasks(tasks)
+    assert cancelled_count == 1
+    assert TaskScheduler.counts(cancelled).cancelled_count == 1
+    assert TaskScheduler.status(cancelled, 1, lifecycle: :cancelled) == "cancelled"
+
+    assert {:ok, retried_task, retried_tasks} = TaskScheduler.retry_task(cancelled, task.task_id)
+    assert retried_task.attempt == 2
+    assert retried_task.status == "pending"
+    assert retried_task.assigned_worker == nil
+    assert TaskScheduler.counts(retried_tasks).pending_count == 1
   end
 end

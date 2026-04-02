@@ -38,7 +38,8 @@ defmodule BeamwardenRunServerTest do
     assert task.result_summary == "review this repo"
 
     workers = Beamwarden.Orchestrator.worker_list(run_id: run_id)
-    assert Enum.any?(workers, &(worker_value(&1, :state) == "completed"))
+    assert Enum.any?(workers, &(worker_value(&1, :state) == "idle"))
+    assert Enum.any?(workers, &(worker_value(&1, :last_task_status) == "completed"))
   end
 
   defp unique_id(prefix) do

@@ -10,6 +10,7 @@ defmodule Beamwarden.ExternalWorker do
     :executor,
     :current_task_id,
     :last_result_summary,
+    :last_task_status,
     :started_at,
     :heartbeat_at,
     :last_event_at,
@@ -84,6 +85,7 @@ defmodule Beamwarden.ExternalWorker do
   @impl true
   def handle_info({:execute, task}, %__MODULE__{} = state) do
     task_id = value(task, :task_id)
+    attempt = value(task, :attempt) || 1
 
     next_state =
       case execute_task(task, state) do
@@ -92,13 +94,15 @@ defmodule Beamwarden.ExternalWorker do
             state.run_id,
             state.worker_id,
             task_id,
+            attempt,
             {:ok, summary}
           )
 
           state
-          |> Map.put(:state, "completed")
+          |> Map.put(:state, "idle")
           |> Map.put(:current_task_id, nil)
           |> Map.put(:last_result_summary, summary)
+          |> Map.put(:last_task_status, "completed")
           |> Map.put(:heartbeat_at, now())
           |> Map.put(:last_event_at, now())
           |> persist()
@@ -108,13 +112,15 @@ defmodule Beamwarden.ExternalWorker do
             state.run_id,
             state.worker_id,
             task_id,
+            attempt,
             {:error, error}
           )
 
           state
-          |> Map.put(:state, "failed")
+          |> Map.put(:state, "idle")
           |> Map.put(:current_task_id, nil)
           |> Map.put(:last_result_summary, error)
+          |> Map.put(:last_task_status, "failed")
           |> Map.put(:heartbeat_at, now())
           |> Map.put(:last_event_at, now())
           |> persist()
@@ -140,6 +146,7 @@ defmodule Beamwarden.ExternalWorker do
       {"BEAMWARDEN_TASK_ID", value(task, :task_id) || ""},
       {"BEAMWARDEN_RUN_ID", value(task, :run_id) || ""},
       {"BEAMWARDEN_TASK_TITLE", value(task, :title) || ""},
+      {"BEAMWARDEN_TASK_ATTEMPT", Integer.to_string(value(task, :attempt) || 1)},
       {"BEAMWARDEN_TASK_PAYLOAD", value(task, :payload) || ""}
     ]
 
@@ -161,6 +168,7 @@ defmodule Beamwarden.ExternalWorker do
       run_id: state.run_id,
       state: state.state,
       current_task_id: state.current_task_id,
+      last_task_status: state.last_task_status,
       started_at: state.started_at,
       heartbeat_at: state.heartbeat_at,
       last_event_at: state.last_event_at,
@@ -173,6 +181,7 @@ defmodule Beamwarden.ExternalWorker do
       task_id: value(task, :task_id),
       run_id: value(task, :run_id),
       title: value(task, :title),
+      attempt: value(task, :attempt) || 1,
       payload: value(task, :payload)
     }
   end

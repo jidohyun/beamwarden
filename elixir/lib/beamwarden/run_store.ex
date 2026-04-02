@@ -26,10 +26,12 @@ defmodule Beamwarden.RunStore do
   end
 
   def delete(run_id) do
-    case File.rm(Beamwarden.run_path(run_id)) do
+    Beamwarden.run_path(run_id)
+    |> File.rm()
+    |> case do
       :ok -> :ok
       {:error, :enoent} -> :ok
-      {:error, reason} -> {:error, reason}
+      error -> error
     end
   end
 

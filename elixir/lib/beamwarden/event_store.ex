@@ -29,23 +29,22 @@ defmodule Beamwarden.EventStore do
     end
   end
 
-  def list_run_ids do
+  def delete(run_id) do
+    Beamwarden.event_path(run_id)
+    |> File.rm()
+    |> case do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      error -> error
+    end
+  end
+
+  def run_ids do
     Beamwarden.event_root()
     |> Path.join("*.jsonl")
     |> Path.wildcard()
-    |> Enum.map(fn path ->
-      path
-      |> Path.basename(".jsonl")
-    end)
+    |> Enum.map(&Path.basename(&1, ".jsonl"))
     |> Enum.sort()
-  end
-
-  def delete(run_id) do
-    case File.rm(Beamwarden.event_path(run_id)) do
-      :ok -> :ok
-      {:error, :enoent} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
   end
 
   defp now do

@@ -102,8 +102,14 @@ defmodule Beamwarden.Orchestrator do
 
     runs = Beamwarden.RunStore.list()
 
-    {stale_runs, skipped_active_runs} =
-      Enum.split_with(runs, fn run ->
+    skipped_active_runs =
+      Enum.filter(runs, fn run ->
+        run_id = value(run, :run_id)
+        Beamwarden.RunServer.running?(run_id) and cleanup_eligible_run?(run)
+      end)
+
+    stale_runs =
+      Enum.filter(runs, fn run ->
         run_id = value(run, :run_id)
 
         !Beamwarden.RunServer.running?(run_id) and

@@ -302,15 +302,17 @@ for a TUI dashboard.
 - recover runs after daemon restart
 - document failure semantics
 
-### Phase 4 — multi-node execution
+### Phase 4 — brokered lifecycle hardening
+- add true live log broker semantics behind `logs --follow`
+- extend cluster lease semantics to orchestration runs, workers, and broker ownership
+- make cleanup/retention lease-aware for run, worker, and event artifacts
+- keep the existing CLI surface while enriching lifecycle metadata and degraded-mode markers
+
+### Phase 5 — multi-node execution and operator UX
 - spawn workers on connected nodes
 - route tasks by node health/capability
-- reassign work on node failure
-
-### Phase 5 — operator UX
-- add `monitor` TUI
-- add event timeline views
-- add richer queue and worker inspection
+- use Phase 4 lease semantics for reassignment/failover
+- add `monitor` TUI, event timeline views, and richer queue/worker inspection
 
 ## Risks
 

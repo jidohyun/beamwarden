@@ -44,7 +44,7 @@ The Elixir workspace currently provides:
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
 - tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, `logs`, and cleanup commands
-- bounded event-stream follow semantics for `mix beamwarden logs <run-id> --follow`, with persisted history replayed first and newly persisted events streamed until completion/timeout
+- bounded event-stream follow semantics for `mix beamwarden logs <run-id> --follow`, with persisted history replayed first and newly persisted events streamed until completion/timeout (Phase 4 design for true live broker semantics is documented but not shipped yet)
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`
@@ -181,6 +181,7 @@ See the operator guides:
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
 - `docs/beamwarden-orchestrator-phase3-review.md`
+- `docs/beamwarden-orchestrator-phase4-design.md`
 
 ---
 
@@ -193,11 +194,13 @@ Start here for the current system:
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
 - `docs/beamwarden-orchestrator-phase3-review.md`
+- `docs/beamwarden-orchestrator-phase4-design.md`
 
 Planning/history docs:
 
 - `docs/elixir-first-review.md`
 - `docs/plans/2026-04-01-elixir-control-plane-design.md`
+- `docs/plans/2026-04-02-beamwarden-orchestrator-phase4-plan.md`
 - `.omx/plans/`
 
 ---

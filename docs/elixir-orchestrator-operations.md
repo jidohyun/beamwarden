@@ -96,7 +96,21 @@ Until Beamwarden grows a richer log broker/follower, operators should read `logs
 
 That keeps the interface honest while preserving a stable command shape for the later streaming implementation.
 
+### Phase 4 target `--follow` contract
+
+The current command shape should stay the same, but the implementation should become broker-backed:
+
+- replay persisted history up to a stable cursor/sequence
+- attach to a live broker on the current owner node when one is available
+- emit an explicit live marker such as `follow=live broker_node=<node> seq=<n>`
+- degrade explicitly to persisted polling with a marker such as `follow=degraded-persisted reason=<reason>` when broker attach fails
+- preserve terminal markers such as `follow=complete status=<state> seq=<n>` and `follow=timeout status=<state> seq=<n>`
+
+That gives operators a real live stream without changing the CLI contract or pretending every line is raw stdout/stderr.
+
 ## Cleanup commands
+
+### Current behavior
 
 Phase 3 keeps two operator-friendly cleanup entrypoints:
 
@@ -105,15 +119,29 @@ Phase 3 keeps two operator-friendly cleanup entrypoints:
 
 Both commands are local-first and should never delete data for an active run.
 
-## Phase 3 review checkpoints
+### Phase 4 target cleanup semantics
 
-Phase 3 is the recovery/lease hardening slice. The current Phase 2 runtime already persists useful run, worker, and event snapshots, but the next implementation should preserve these review constraints:
+Phase 4 should keep the command surface stable while changing the protection rules behind it:
+
+- consult orchestration leases before deleting run, worker, or event artifacts
+- skip anything that is `active`, `recovering`, or still within a recoverable lease window
+- compact cold event history before deleting it outright
+- report `skipped_active_runs`, `skipped_recovering_runs`, and `compacted_event_runs` in addition to deletion counts
+
+That keeps cleanup predictable even after run ownership and recovery cross node boundaries.
+
+## Phase 4 design checkpoints
+
+Phase 4 is the broker/lifecycle/retention hardening slice. The current Phase 3 runtime already persists useful run, worker, and event snapshots, but the next implementation should preserve these review constraints:
 
 - **separate liveness from history** — persisted rows are last-known state, not proof that a worker or run is still active
-- **make cleanup lease-aware** — expiry must never delete data that still belongs to an active run/worker process
+- **make cleanup lease-aware** — expiry must never delete data that still belongs to an active or recoverable run/worker lease
 - **requeue with evidence** — when a lease expires or a worker is judged stale, append a visible recovery event before reassigning work
+- **add true live follow semantics** — the live broker should deliver already-persisted events with resumable cursors instead of hand-wavy tailing claims
 - **keep operator output compact** — recovery metadata should clarify why a task moved instead of turning `logs` into raw process replay
 - **document bounded retention** — operators need to know which files are durable state vs recyclable cache/history
+
+See also `docs/beamwarden-orchestrator-phase4-design.md` for the implementation-oriented Phase 4 proposal.
 
 ## Review notes for this slice
 

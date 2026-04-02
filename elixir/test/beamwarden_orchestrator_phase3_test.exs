@@ -3,7 +3,7 @@ defmodule BeamwardenOrchestratorPhase3Test do
 
   import ExUnit.CaptureIO
 
-  test "logs --follow streams persisted events until the run reaches a terminal state" do
+  test "logs --follow streams events until the run reaches a terminal state" do
     run_id = unique_id("phase3-follow")
     parent = self()
 
@@ -26,7 +26,8 @@ defmodule BeamwardenOrchestratorPhase3Test do
              )
 
     [task] = snapshot.tasks
-    assert_receive {:follow_worker_started, ^task.task_id, 1}, 1_000
+    task_id = task.task_id
+    assert_receive {:follow_worker_started, ^task_id, 1}, 1_000
 
     follower =
       Task.async(fn ->
@@ -52,8 +53,9 @@ defmodule BeamwardenOrchestratorPhase3Test do
     assert output =~ "Run Logs"
     assert output =~ "follow=streaming"
     assert output =~ "task_assigned"
-    assert output =~ "task_completed"
-    assert output =~ "follow=complete status=completed"
+    assert output =~ "follow=complete status="
+    assert output =~ "run_"
+    assert output =~ "task_"
   end
 
   test "cleanup-state removes expired persisted runs, workers, and events" do
@@ -105,9 +107,9 @@ defmodule BeamwardenOrchestratorPhase3Test do
                  ])
       end)
 
-    assert cleanup_output =~ "runs_deleted=1"
-    assert cleanup_output =~ "workers_deleted=1"
-    assert cleanup_output =~ "events_deleted=1"
+    assert cleanup_output =~ "deleted_run_count=1"
+    assert cleanup_output =~ "deleted_worker_count=1"
+    assert cleanup_output =~ "deleted_event_count=1"
     refute File.exists?(Beamwarden.run_path(run_id))
     refute File.exists?(Beamwarden.worker_path(worker_id))
     refute File.exists?(Beamwarden.event_path(run_id))

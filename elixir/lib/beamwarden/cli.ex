@@ -156,8 +156,8 @@ defmodule Beamwarden.CLI do
       end
     else
       case Beamwarden.Orchestrator.logs(run_id) do
-        {:ok, events} ->
-          {:ok, Beamwarden.Orchestrator.render_logs(run_id, events)}
+        {:ok, report} ->
+          {:ok, Beamwarden.Orchestrator.render_logs(report)}
 
         {:error, :not_found} ->
           {:error, "Run not found: #{run_id}"}

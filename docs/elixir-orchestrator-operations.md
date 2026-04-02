@@ -22,12 +22,13 @@ mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
 mix beamwarden logs <run-id> --follow
 mix beamwarden cleanup-state --older-than-seconds 86400
+mix beamwarden cleanup-runs --ttl-seconds 86400
 ```
 
 `logs` should always provide a persisted summary view.
 `logs --follow` should stream newly persisted orchestration events until the run settles into a terminal state (or until an explicit follow timeout is hit).
 
-Today `logs --follow` is intentionally conservative: it replays the currently available event snapshot exactly once and then exits. When the run is still active, the CLI labels that output as a runtime snapshot replay; when the run is no longer active, it labels it as a persisted snapshot replay. In both cases Beamwarden avoids pretending it is tailing a live process stream.
+Today `logs --follow` is intentionally conservative in a different way: it replays the currently available event snapshot first, emits `follow=streaming`, then streams newly persisted orchestration events until the run reaches a terminal state or the follow timeout expires. It still avoids pretending that Beamwarden is tailing raw worker stdout/stderr directly.
 
 ## Worker reporting: active vs persisted
 
@@ -88,14 +89,23 @@ That gives Beamwarden an answer to "what happened?" even after the worker proces
 
 ### Current `--follow` contract
 
-Until Beamwarden grows a real log broker/follower, operators should read `logs <run-id> --follow` as:
+Until Beamwarden grows a richer log broker/follower, operators should read `logs <run-id> --follow` as:
 
-- render the best currently available event history first
-- emit an explicit marker that this is a one-shot replay, not a live tail
-- use a runtime snapshot label for active runs and a persisted snapshot label for inactive runs
-- avoid implying that the CLI is attached to a running worker stdout/stderr stream
+- render the currently persisted event history first
+- emit an explicit `follow=streaming` marker before polling for newly persisted orchestration events
+- stop with a terminal marker such as `follow=complete status=<state>` or `follow=timeout status=<state>`
+- avoid implying that the CLI is attached directly to a running worker stdout/stderr stream
 
 That keeps the interface honest while preserving a stable command shape for the later streaming implementation.
+
+## Cleanup commands
+
+Phase 3 keeps two operator-friendly cleanup entrypoints:
+
+- `cleanup-state --older-than-seconds <n>` — retention-oriented cleanup keyed to older persisted artifacts
+- `cleanup-runs --ttl-seconds <n>` — run/worker/event cleanup with the same retention intent but a run-focused command shape
+
+Both commands are local-first and should never delete data for an active run.
 
 ## Phase 3 review checkpoints
 

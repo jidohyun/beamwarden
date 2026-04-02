@@ -97,85 +97,33 @@ defmodule Beamwarden.Orchestrator do
   end
 
   def cleanup_runs(opts \\ []) do
-    ttl_seconds = Keyword.get(opts, :ttl_seconds, 3_600)
-    cutoff = DateTime.add(DateTime.utc_now(), -ttl_seconds, :second)
-
-    runs = Beamwarden.RunStore.list()
-
-    skipped_active_runs =
-      Enum.filter(runs, fn run ->
-        run_id = value(run, :run_id)
-        Beamwarden.RunServer.running?(run_id) and cleanup_eligible_run?(run)
-      end)
-
-    stale_runs =
-      Enum.filter(runs, fn run ->
-        run_id = value(run, :run_id)
-
-        !Beamwarden.RunServer.running?(run_id) and
-          cleanup_eligible_run?(run) and
-          older_than?(value(run, :updated_at), cutoff)
-      end)
-
-    deleted_run_ids =
-      stale_runs
-      |> Enum.map(&value(&1, :run_id))
-      |> Enum.each(&Beamwarden.RunStore.delete/1)
-      |> then(fn _ -> Enum.map(stale_runs, &value(&1, :run_id)) end)
-
-    deleted_run_id_set = MapSet.new(deleted_run_ids)
-
-    deleted_worker_ids =
-      Beamwarden.WorkerStore.list()
-      |> Enum.filter(fn worker ->
-        worker_id = value(worker, :worker_id)
-        run_id = value(worker, :run_id)
-
-        Beamwarden.WorkerSupervisor.worker_pid(worker_id) == :error and
-          (MapSet.member?(deleted_run_id_set, run_id) or
-             ((is_nil(run_id) or !Beamwarden.RunServer.running?(run_id)) and
-                older_than?(worker_freshness_timestamp(worker), cutoff)))
-      end)
-      |> Enum.map(fn worker ->
-        worker_id = value(worker, :worker_id)
-        :ok = Beamwarden.WorkerStore.delete(worker_id)
-        worker_id
-      end)
-
-    deleted_event_run_ids =
-      Beamwarden.EventStore.list_run_ids()
-      |> Enum.filter(fn run_id ->
-        MapSet.member?(deleted_run_id_set, run_id) or
-          (!Beamwarden.RunServer.running?(run_id) and not run_exists?(run_id) and
-             older_than?(event_timestamp(run_id), cutoff))
-      end)
-      |> Enum.map(fn run_id ->
-        :ok = Beamwarden.EventStore.delete(run_id)
-        run_id
-      end)
-
-    {:ok,
-     %{
-       ttl_seconds: ttl_seconds,
-       deleted_run_ids: deleted_run_ids,
-       deleted_worker_ids: deleted_worker_ids,
-       deleted_event_run_ids: deleted_event_run_ids,
-       skipped_active_run_ids: Enum.map(skipped_active_runs, &value(&1, :run_id))
-     }}
+    opts
+    |> Keyword.put_new_lazy(:older_than_seconds, fn -> Keyword.get(opts, :ttl_seconds, 3_600) end)
+    |> Beamwarden.OrchestratorRetention.cleanup()
+    |> then(&{:ok, &1})
   end
 
   def render_cleanup(report) do
     [
       "Cleanup Runs",
       "",
-      "ttl_seconds=#{value(report, :ttl_seconds)}",
-      "deleted_run_count=#{length(value(report, :deleted_run_ids) || [])}",
-      "deleted_worker_count=#{length(value(report, :deleted_worker_ids) || [])}",
-      "deleted_event_count=#{length(value(report, :deleted_event_run_ids) || [])}",
+      "ttl_seconds=#{value(report, :ttl_seconds) || value(report, :older_than_seconds)}",
+      "deleted_run_count=#{length(value(report, :deleted_run_ids) || value(report, :run_ids_removed) || [])}",
+      "deleted_worker_count=#{length(value(report, :deleted_worker_ids) || value(report, :worker_ids_removed) || [])}",
+      "deleted_event_count=#{length(value(report, :deleted_event_run_ids) || value(report, :event_run_ids_removed) || [])}",
       "skipped_active_count=#{length(value(report, :skipped_active_run_ids) || [])}",
-      maybe_csv("deleted_runs", value(report, :deleted_run_ids)),
-      maybe_csv("deleted_workers", value(report, :deleted_worker_ids)),
-      maybe_csv("deleted_event_runs", value(report, :deleted_event_run_ids)),
+      maybe_csv(
+        "deleted_runs",
+        value(report, :deleted_run_ids) || value(report, :run_ids_removed)
+      ),
+      maybe_csv(
+        "deleted_workers",
+        value(report, :deleted_worker_ids) || value(report, :worker_ids_removed)
+      ),
+      maybe_csv(
+        "deleted_event_runs",
+        value(report, :deleted_event_run_ids) || value(report, :event_run_ids_removed)
+      ),
       maybe_csv("skipped_active_runs", value(report, :skipped_active_run_ids))
     ]
     |> Enum.reject(&is_nil/1)
@@ -186,32 +134,20 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_csv(_label, []), do: nil
   defp maybe_csv(label, values), do: "#{label}=#{Enum.join(values, ",")}"
 
-  defp cleanup_eligible_run?(run) do
-    value(run, :status) in ["completed", "failed", "cancelled"]
-  end
-
-  defp worker_freshness_timestamp(worker) do
-    value(worker, :last_event_at) ||
-      value(worker, :heartbeat_at) ||
-      value(worker, :updated_at) ||
-      value(worker, :started_at)
-  end
-
-  defp event_timestamp(run_id) do
-    path = Beamwarden.event_path(run_id)
-
-    with {:ok, stat} <- File.stat(path),
-         {:ok, datetime} <- DateTime.from_unix(stat.mtime) do
-      datetime
-    else
-      _ -> nil
-    end
-  end
-
   def follow_logs(run_id, sink, opts \\ []) when is_function(sink, 1) do
     with {:ok, snapshot} <- run_snapshot(run_id),
          {:ok, events} <- Beamwarden.EventStore.list(run_id) do
-      sink.(render_logs(run_id, events))
+      sink.(
+        render_logs(%{
+          run_id: run_id,
+          run_status: value(snapshot, :status),
+          run_lifecycle: value(snapshot, :lifecycle) || "active",
+          source: if(Beamwarden.RunServer.running?(run_id), do: "runtime", else: "persisted"),
+          follow_supported: true,
+          events: events
+        })
+      )
+
       sink.("follow=streaming")
       do_follow_logs(run_id, length(events), sink, snapshot, opts)
     end
@@ -310,36 +246,26 @@ defmodule Beamwarden.Orchestrator do
   end
 
   def render_logs(report) do
+    events = value(report, :events) || []
+
     [
       "Run Logs",
       "",
-      "run_id=#{run_id}",
-      "source=persisted_events",
+      "run_id=#{value(report, :run_id)}",
+      "run_status=#{value(report, :run_status)}",
+      "run_lifecycle=#{value(report, :run_lifecycle)}",
+      "event_source=#{value(report, :source) || "persisted"}",
+      "follow_supported=#{value(report, :follow_supported)}",
       "event_count=#{length(events)}",
       if(events == [],
         do: "none",
         else:
-          Enum.map(value(report, :events) || [], fn event ->
+          Enum.map(events, fn event ->
             format_event(event)
           end)
       )
     ]
     |> List.flatten()
-    |> Enum.join("\n")
-  end
-
-  def render_cleanup(summary) do
-    [
-      "Cleanup Summary",
-      "",
-      "older_than_seconds=#{value(summary, :older_than_seconds)}",
-      "runs_deleted=#{value(summary, :runs_deleted) || 0}",
-      "workers_deleted=#{value(summary, :workers_deleted) || 0}",
-      "events_deleted=#{value(summary, :events_deleted) || 0}",
-      "run_ids_removed=#{Enum.join(value(summary, :run_ids_removed) || [], ",")}",
-      "worker_ids_removed=#{Enum.join(value(summary, :worker_ids_removed) || [], ",")}",
-      "event_run_ids_removed=#{Enum.join(value(summary, :event_run_ids_removed) || [], ",")}"
-    ]
     |> Enum.join("\n")
   end
 
@@ -369,7 +295,9 @@ defmodule Beamwarden.Orchestrator do
   defp do_follow_logs(run_id, seen_count, sink, snapshot, opts) do
     interval_ms = Keyword.get(opts, :interval_ms, 50)
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
-    started_at = Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
+
+    started_at =
+      Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
 
     cond do
       value(snapshot, :status) in ["completed", "failed", "cancelled"] ->
@@ -386,7 +314,7 @@ defmodule Beamwarden.Orchestrator do
 
         events
         |> Enum.drop(seen_count)
-        |> Enum.each(&(sink.(render_event(&1))))
+        |> Enum.each(&sink.(render_event(&1)))
 
         {:ok, latest_snapshot} = run_snapshot(run_id)
 

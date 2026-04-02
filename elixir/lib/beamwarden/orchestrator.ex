@@ -366,7 +366,9 @@ defmodule Beamwarden.Orchestrator do
   defp do_follow_logs(run_id, seen_count, sink, snapshot, opts) do
     interval_ms = Keyword.get(opts, :interval_ms, 50)
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
-    started_at = Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
+
+    started_at =
+      Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
 
     cond do
       value(snapshot, :status) in ["completed", "failed", "cancelled"] ->
@@ -383,7 +385,7 @@ defmodule Beamwarden.Orchestrator do
 
         events
         |> Enum.drop(seen_count)
-        |> Enum.each(&(sink.(render_event(&1))))
+        |> Enum.each(&sink.(render_event(&1)))
 
         {:ok, latest_snapshot} = run_snapshot(run_id)
 

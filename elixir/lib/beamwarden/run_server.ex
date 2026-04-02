@@ -236,7 +236,12 @@ defmodule Beamwarden.RunServer do
     Beamwarden.RunStore.save(snapshot)
     maybe_log_run_transition(state.last_status, value(snapshot, :status), snapshot)
 
-    %{state | updated_at: value(snapshot, :updated_at), finished_at: value(snapshot, :finished_at), last_status: value(snapshot, :status)}
+    %{
+      state
+      | updated_at: value(snapshot, :updated_at),
+        finished_at: value(snapshot, :finished_at),
+        last_status: value(snapshot, :status)
+    }
   end
 
   defp snapshot_map(%__MODULE__{} = state) do
@@ -380,7 +385,10 @@ defmodule Beamwarden.RunServer do
     })
 
     state
-    |> Map.put(:tasks, TaskScheduler.fail_task(state.tasks, value(task, :task_id), worker_id, error))
+    |> Map.put(
+      :tasks,
+      TaskScheduler.fail_task(state.tasks, value(task, :task_id), worker_id, error)
+    )
     |> Map.put(:updated_at, now())
     |> persist()
   end
@@ -428,11 +436,17 @@ defmodule Beamwarden.RunServer do
 
   defp normalize_lifecycle(%__MODULE__{} = state) do
     counts = TaskScheduler.counts(state.tasks)
-    status = TaskScheduler.status(state.tasks, length(state.worker_ids), lifecycle: state.lifecycle)
+
+    status =
+      TaskScheduler.status(state.tasks, length(state.worker_ids), lifecycle: state.lifecycle)
 
     cond do
       state.lifecycle == :cancel_requested and counts.cancelling_count == 0 ->
-        %{state | lifecycle: :cancelled, finished_at: state.finished_at || state.updated_at || now()}
+        %{
+          state
+          | lifecycle: :cancelled,
+            finished_at: state.finished_at || state.updated_at || now()
+        }
 
       status in ["completed", "failed", "cancelled"] ->
         %{state | finished_at: state.finished_at || state.updated_at || now()}

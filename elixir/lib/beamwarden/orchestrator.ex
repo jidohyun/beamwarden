@@ -127,7 +127,7 @@ defmodule Beamwarden.Orchestrator do
 
         Beamwarden.WorkerSupervisor.worker_pid(worker_id) == :error and
           (MapSet.member?(deleted_run_id_set, run_id) or
-             ((is_nil(run_id) or !Beamwarden.RunServer.running?(run_id)) and
+             ((is_nil(run_id) or !run_exists?(run_id)) and
                 older_than?(worker_freshness_timestamp(worker), cutoff)))
       end)
       |> Enum.map(fn worker ->
@@ -307,10 +307,13 @@ defmodule Beamwarden.Orchestrator do
     [
       "Run Logs",
       "",
-      "run_id=#{run_id}",
-      "source=persisted_events",
-      "event_count=#{length(events)}",
-      if(events == [],
+      "run_id=#{value(report, :run_id)}",
+      "run_status=#{value(report, :run_status)}",
+      "run_lifecycle=#{value(report, :run_lifecycle)}",
+      "event_source=#{value(report, :source)}",
+      "follow_supported=#{inspect(value(report, :follow_supported))}",
+      "event_count=#{length(value(report, :events) || [])}",
+      if((value(report, :events) || []) == [],
         do: "none",
         else:
           Enum.map(value(report, :events) || [], fn event ->
@@ -435,5 +438,13 @@ defmodule Beamwarden.Orchestrator do
     |> Enum.join(" ")
   end
 
-  defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  defp value(nil, _key), do: nil
+
+  defp value(map, key) do
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      Map.has_key?(map, Atom.to_string(key)) -> Map.get(map, Atom.to_string(key))
+      true -> nil
+    end
+  end
 end

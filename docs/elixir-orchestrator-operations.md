@@ -20,9 +20,10 @@ mix beamwarden worker-list
 mix beamwarden retry-task <run-id> <task-id>
 mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
+mix beamwarden cleanup-runs [--ttl-seconds 3600]
 ```
 
-`logs --follow` can remain optional, but the non-follow command should always provide a persisted summary view.
+`logs --follow` remains a **single-shot replay hint** in this slice: Beamwarden reports whether the log view is coming from a live runtime or only from persisted state, then replays the stored event summary once.
 
 Today `logs --follow` is intentionally conservative: it replays the currently available event snapshot exactly once and then exits. When the run is still active, the CLI labels that output as a runtime snapshot replay; when the run is no longer active, it labels it as a persisted snapshot replay. In both cases Beamwarden avoids pretending it is tailing a live process stream.
 
@@ -77,29 +78,25 @@ The useful minimum is:
 - recent orchestration events (`run_started`, `task_assigned`, `task_completed`, `task_failed`, `task_retried`, `run_cancelled`)
 - worker output summaries or final result/error text
 - timestamps that let operators correlate the event stream with `run-status` and `worker-list`
+- explicit metadata for `run_status`, `run_lifecycle`, and `event_source` so operators know whether they are reading a live runtime view or a persisted snapshot
 
 That gives Beamwarden an answer to "what happened?" even after the worker process is gone.
 
-### Current `--follow` contract
+## Persisted-state cleanup / expiry
 
-Until Beamwarden grows a real log broker/follower, operators should read `logs <run-id> --follow` as:
+Long-lived operator workspaces need a way to prune old orchestration artifacts once a run is clearly over.
 
-- render the best currently available event history first
-- emit an explicit marker that this is a one-shot replay, not a live tail
-- use a runtime snapshot label for active runs and a persisted snapshot label for inactive runs
-- avoid implying that the CLI is attached to a running worker stdout/stderr stream
+`cleanup-runs --ttl-seconds <n>` removes **terminal persisted runs** older than the TTL and also prunes their related:
 
-That keeps the interface honest while preserving a stable command shape for the later streaming implementation.
+- persisted run snapshots
+- persisted worker snapshots
+- persisted event files
 
-## Phase 3 review checkpoints
+Guardrails:
 
-Phase 3 is the recovery/lease hardening slice. The current Phase 2 runtime already persists useful run, worker, and event snapshots, but the next implementation should preserve these review constraints:
-
-- **separate liveness from history** — persisted rows are last-known state, not proof that a worker or run is still active
-- **make cleanup lease-aware** — expiry must never delete data that still belongs to an active run/worker process
-- **requeue with evidence** — when a lease expires or a worker is judged stale, append a visible recovery event before reassigning work
-- **keep operator output compact** — recovery metadata should clarify why a task moved instead of turning `logs` into raw process replay
-- **document bounded retention** — operators need to know which files are durable state vs recyclable cache/history
+- active runs are skipped even if their persisted snapshot is older than the TTL
+- fresh persisted runs are kept for inspection/recovery
+- orphaned persisted worker/event files older than the TTL are also removed
 
 ## Review notes for this slice
 

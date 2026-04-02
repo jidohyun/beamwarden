@@ -170,6 +170,7 @@ defmodule Beamwarden.CLI do
 
   def run_local(["cleanup-runs" | rest]) do
     {opts, _, _} = OptionParser.parse(rest, strict: [ttl_seconds: :integer])
+
     {:ok, report} = Beamwarden.Orchestrator.cleanup_runs(ttl_seconds: opts[:ttl_seconds] || 3_600)
     {:ok, Beamwarden.Orchestrator.render_cleanup(report)}
   end

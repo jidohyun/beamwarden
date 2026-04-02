@@ -52,47 +52,17 @@ defmodule Beamwarden.Orchestrator do
   end
 
   def cancel_run(run_id) do
-    case run_snapshot(run_id) do
-      {:ok, _snapshot} ->
-        if Beamwarden.RunServer.running?(run_id) do
-          Beamwarden.RunServer.cancel(run_id)
-        else
-          {:error, :not_running}
-        end
-
-      error ->
-        error
-    end
+    with_live_run(run_id, fn -> Beamwarden.RunServer.cancel(run_id) end)
   end
 
   def retry_task(run_id, task_id) do
-    case run_snapshot(run_id) do
-      {:ok, _snapshot} ->
-        if Beamwarden.RunServer.running?(run_id) do
-          Beamwarden.RunServer.retry_task(run_id, task_id)
-        else
-          {:error, :not_running}
-        end
-
-      error ->
-        error
-    end
+    with_live_run(run_id, fn -> Beamwarden.RunServer.retry_task(run_id, task_id) end)
   end
 
   def logs(run_id) do
     with {:ok, snapshot} <- run_snapshot(run_id),
          {:ok, events} <- Beamwarden.EventStore.list(run_id) do
-      active? = Beamwarden.RunServer.running?(run_id)
-
-      {:ok,
-       %{
-         run_id: run_id,
-         run_status: value(snapshot, :status),
-         run_lifecycle: value(snapshot, :lifecycle) || "active",
-         source: if(active?, do: "runtime", else: "persisted"),
-         follow_supported: active?,
-         events: events
-       }}
+      {:ok, log_report(run_id, snapshot, events)}
     end
   end
 
@@ -137,16 +107,7 @@ defmodule Beamwarden.Orchestrator do
   def follow_logs(run_id, sink, opts \\ []) when is_function(sink, 1) do
     with {:ok, snapshot} <- run_snapshot(run_id),
          {:ok, events} <- Beamwarden.EventStore.list(run_id) do
-      sink.(
-        render_logs(%{
-          run_id: run_id,
-          run_status: value(snapshot, :status),
-          run_lifecycle: value(snapshot, :lifecycle) || "active",
-          source: if(Beamwarden.RunServer.running?(run_id), do: "runtime", else: "persisted"),
-          follow_supported: true,
-          events: events
-        })
-      )
+      sink.(render_logs(log_report(run_id, snapshot, events, follow_supported: true)))
 
       sink.("follow=streaming")
       do_follow_logs(run_id, length(events), sink, snapshot, opts)
@@ -271,10 +232,20 @@ defmodule Beamwarden.Orchestrator do
 
   def render_event(event), do: format_event(event)
 
+  defp with_live_run(run_id, fun) when is_function(fun, 0) do
+    case run_snapshot(run_id) do
+      {:ok, _snapshot} ->
+        if Beamwarden.RunServer.running?(run_id), do: fun.(), else: {:error, :not_running}
+
+      error ->
+        error
+    end
+  end
+
   defp await_until(run_id, deadline) do
     case run_snapshot(run_id) do
       {:ok, snapshot} ->
-        if value(snapshot, :status) in ["completed", "failed", "cancelled"] or
+        if terminal_status?(value(snapshot, :status)) or
              System.monotonic_time(:millisecond) >= deadline do
           {:ok, snapshot}
         else
@@ -292,6 +263,19 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_text(label, value), do: "#{label}=#{value}"
   defp truthy?(map, key), do: value(map, key) in [true, "true"]
 
+  defp log_report(run_id, snapshot, events, opts \\ []) do
+    active? = Beamwarden.RunServer.running?(run_id)
+
+    %{
+      run_id: run_id,
+      run_status: value(snapshot, :status),
+      run_lifecycle: value(snapshot, :lifecycle) || "active",
+      source: if(active?, do: "runtime", else: "persisted"),
+      follow_supported: Keyword.get(opts, :follow_supported, active?),
+      events: events
+    }
+  end
+
   defp do_follow_logs(run_id, seen_count, sink, snapshot, opts) do
     interval_ms = Keyword.get(opts, :interval_ms, 50)
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
@@ -300,7 +284,7 @@ defmodule Beamwarden.Orchestrator do
       Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
 
     cond do
-      value(snapshot, :status) in ["completed", "failed", "cancelled"] ->
+      terminal_status?(value(snapshot, :status)) ->
         sink.("follow=complete status=#{value(snapshot, :status)}")
         :ok
 
@@ -348,6 +332,8 @@ defmodule Beamwarden.Orchestrator do
 
     if persisted_state && persisted_state != runtime_state, do: persisted_state
   end
+
+  defp terminal_status?(status), do: status in ["completed", "failed", "cancelled"]
 
   defp format_event(event) do
     [

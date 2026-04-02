@@ -13,7 +13,7 @@ The current orchestrator already gives operators a useful local-first surface:
 - append-only event history via `Beamwarden.EventStore`
 - explicit active-vs-persisted worker reporting through `worker-list`
 - retry/cancel lifecycle events surfaced through `logs <run-id>`
-- an honest `logs --follow` placeholder that keeps the command stable while live streaming is still unimplemented
+- a conservative `logs --follow` mode that replays persisted history, emits `follow=streaming`, then streams newly persisted orchestration events until completion or timeout
 
 That means Phase 3 is not starting from zero. It is hardening a runtime that already has operator-readable state and recovery clues.
 

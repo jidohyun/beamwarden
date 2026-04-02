@@ -26,9 +26,7 @@ mix beamwarden cleanup-runs --ttl-seconds 86400
 ```
 
 `logs` should always provide a persisted summary view.
-`logs --follow` should stream newly persisted orchestration events until the run settles into a terminal state (or until an explicit follow timeout is hit).
-
-Today `logs --follow` is intentionally conservative in a different way: it replays the currently available event snapshot first, emits `follow=streaming`, then streams newly persisted orchestration events until the run reaches a terminal state or the follow timeout expires. It still avoids pretending that Beamwarden is tailing raw worker stdout/stderr directly.
+`logs --follow` is intentionally conservative: it replays the currently available event snapshot first, emits `follow=streaming`, then streams newly persisted orchestration events until the run reaches a terminal state or the follow timeout expires. It still avoids pretending that Beamwarden is tailing raw worker stdout/stderr directly.
 
 ## Worker reporting: active vs persisted
 
@@ -119,7 +117,7 @@ Phase 3 is the recovery/lease hardening slice. The current Phase 2 runtime alrea
 
 ## Review notes for this slice
 
-The Phase 1 runtime already established a good shape for local runs (`RunServer`, `TaskScheduler`, `ExternalWorker`, persisted run/worker snapshots). Phase 2 should preserve that simplicity:
+The Phase 1 runtime already established a good shape for local runs (`RunServer`, `TaskScheduler`, `ExternalWorker`, persisted run/worker snapshots). Phase 3 should preserve that simplicity:
 
 - prefer explicit status/source fields over clever inference in CLI output
 - keep retry/cancel semantics visible in persisted state

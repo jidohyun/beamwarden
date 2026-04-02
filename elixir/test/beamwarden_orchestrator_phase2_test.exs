@@ -4,35 +4,37 @@ defmodule BeamwardenOrchestratorPhase2Test do
   import ExUnit.CaptureIO
 
   test "worker-list distinguishes active worker state from persisted worker state" do
-    parent = self()
     run_id = unique_id("phase2-workers")
-    {:ok, latch} = Agent.start_link(fn -> :hold end)
+    worker_id = "#{run_id}-worker-1"
 
-    on_exit(fn ->
-      if Process.alive?(latch), do: Agent.stop(latch)
-    end)
+    Beamwarden.WorkerStore.save(%{
+      worker_id: worker_id,
+      run_id: run_id,
+      state: "failed",
+      current_task_id: "persisted-task",
+      started_at: "persisted-started-at",
+      heartbeat_at: "persisted-heartbeat-at",
+      last_event_at: "persisted-last-event-at",
+      last_result_summary: "persisted boom"
+    })
 
-    assert {:ok, snapshot} =
-             Beamwarden.Orchestrator.start_run("review this repo",
-               run_id: run_id,
-               workers: 1,
-               await_timeout: 100,
-               worker_opts: [
-                 executor: fn task ->
-                   send(parent, {:worker_started, task})
-                   wait_until(fn -> Agent.get(latch, &(&1 == :release)) end, 5_000)
-                   {:ok, "done"}
-                 end
-               ]
+    assert {:ok, ^worker_id} =
+             Beamwarden.WorkerSupervisor.start_worker(run_id,
+               worker_id: worker_id,
+               executor: fn _task -> {:ok, "done"} end
              )
 
-    assert snapshot.status == "running"
-    assert_receive {:worker_started, %{task_id: task_id}}, 1_000
+    on_exit(fn ->
+      case Registry.lookup(Beamwarden.ExternalWorkerRegistry, worker_id) do
+        [{pid, _value}] -> Process.exit(pid, :kill)
+        [] -> :ok
+      end
+    end)
 
     assert wait_until(fn ->
              Enum.any?(
                Beamwarden.WorkerSupervisor.list_live_workers(run_id: run_id),
-               &(worker_value(&1, :state) == "busy")
+               &(worker_value(&1, :worker_id) == worker_id)
              )
            end)
 
@@ -41,16 +43,11 @@ defmodule BeamwardenOrchestratorPhase2Test do
         assert 0 == Beamwarden.CLI.main(["worker-list"])
       end)
 
-    assert worker_output =~ "worker_id=#{run_id}-worker-1"
+    assert worker_output =~ "worker_id=#{worker_id}"
     assert worker_output =~ "active_state="
     assert worker_output =~ "persisted_state="
-    assert worker_output =~ task_id
-
-    Agent.update(latch, fn _ -> :release end)
-
-    assert wait_until(fn ->
-             match?({:ok, %{status: "completed"}}, Beamwarden.Orchestrator.run_snapshot(run_id))
-           end)
+    assert worker_output =~ "active_current_task_id="
+    assert worker_output =~ "persisted_current_task_id=persisted-task"
   end
 
   test "retry-task requeues a failed task and clears the prior failure" do

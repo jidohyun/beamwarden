@@ -140,13 +140,18 @@ defmodule Beamwarden.CLI do
         strict: [follow: :boolean, follow_interval_ms: :integer, follow_timeout_ms: :integer]
       )
 
-    if opts[:follow] do
-      case Beamwarden.Orchestrator.follow_logs(run_id, &IO.puts/1,
-             interval_ms: opts[:follow_interval_ms] || 50,
-             timeout_ms: opts[:follow_timeout_ms] || 5_000
-           ) do
-        :ok ->
-          {:ok, ""}
+    case Beamwarden.Orchestrator.logs(run_id) do
+      {:ok, report} ->
+        output =
+          Beamwarden.Orchestrator.render_logs(report) <>
+            if(opts[:follow],
+              do:
+                if(Beamwarden.Orchestrator.logs(run_id) |> elem(1) |> Map.get(:follow_supported),
+                  do: "\nfollow=requested_runtime_snapshot_replayed_once",
+                  else: "\nfollow=requested_persisted_snapshot_replayed_once"
+                ),
+              else: ""
+            )
 
         {:error, :not_found} ->
           {:error, "Run not found: #{run_id}"}

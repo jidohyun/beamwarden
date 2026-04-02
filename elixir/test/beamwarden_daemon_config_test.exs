@@ -9,9 +9,6 @@ defmodule BeamwardenDaemonConfigTest do
     previous_beamwarden_node = System.get_env("BEAMWARDEN_DAEMON_NODE")
     previous_beamwarden_cookie = System.get_env("BEAMWARDEN_DAEMON_COOKIE")
     previous_beamwarden_mode = System.get_env("BEAMWARDEN_DAEMON_NAME_MODE")
-    previous_legacy_node = System.get_env("CLAW_DAEMON_NODE")
-    previous_legacy_cookie = System.get_env("CLAW_DAEMON_COOKIE")
-    previous_legacy_mode = System.get_env("CLAW_DAEMON_NAME_MODE")
     previous_future_node = Application.get_env(:beamwarden, :daemon_node)
     previous_future_cookie = Application.get_env(:beamwarden, :daemon_cookie)
 
@@ -28,9 +25,6 @@ defmodule BeamwardenDaemonConfigTest do
       restore_env_var("BEAMWARDEN_DAEMON_NODE", previous_beamwarden_node)
       restore_env_var("BEAMWARDEN_DAEMON_COOKIE", previous_beamwarden_cookie)
       restore_env_var("BEAMWARDEN_DAEMON_NAME_MODE", previous_beamwarden_mode)
-      restore_env_var("CLAW_DAEMON_NODE", previous_legacy_node)
-      restore_env_var("CLAW_DAEMON_COOKIE", previous_legacy_cookie)
-      restore_env_var("CLAW_DAEMON_NAME_MODE", previous_legacy_mode)
       restore_app_env(:beamwarden, :daemon_node, previous_future_node)
       restore_app_env(:beamwarden, :daemon_cookie, previous_future_cookie)
     end)
@@ -40,6 +34,9 @@ defmodule BeamwardenDaemonConfigTest do
 
   test "defaults to shortnames without daemon configuration" do
     Beamwarden.AppIdentity.delete_env(:daemon_node)
+    System.delete_env("CLAW_DAEMON_NODE")
+    System.delete_env("CLAW_DAEMON_COOKIE")
+    System.delete_env("CLAW_DAEMON_NAME_MODE")
     System.delete_env("BEAMWARDEN_DAEMON_NAME_MODE")
 
     assert Beamwarden.Daemon.configured_name_mode() == :shortnames

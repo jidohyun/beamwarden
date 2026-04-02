@@ -13,7 +13,7 @@ The current orchestrator already gives operators a useful local-first surface:
 - append-only event history via `Beamwarden.EventStore`
 - explicit active-vs-persisted worker reporting through `worker-list`
 - retry/cancel lifecycle events surfaced through `logs <run-id>`
-- an honest `logs --follow` placeholder that keeps the command stable while live streaming is still unimplemented
+- a bounded `logs --follow` event-stream mode that replays persisted history first and then tails newly persisted orchestration events until completion/timeout
 
 That means Phase 3 is not starting from zero. It is hardening a runtime that already has operator-readable state and recovery clues.
 
@@ -71,7 +71,7 @@ Use these questions when reviewing a Phase 3 implementation:
 1. Can an operator tell the difference between a live worker, a stale worker snapshot, and an expired worker lease?
 2. If a task is requeued after expiry, does `logs <run-id>` explain why?
 3. Can cleanup delete the history of a run that is still active or still being recovered?
-4. Does `logs --follow` clearly differentiate replay-only output from any future live tail mode, including the active-run vs persisted-run labels?
+4. Does `logs --follow` clearly differentiate event-stream follow from any future raw stdout/stderr tail mode?
 5. After a restart, does Beamwarden restore the minimum useful state without inventing liveness it cannot prove?
 
 ## Documentation update rules

@@ -77,7 +77,13 @@ defmodule Beamwarden.WorkerSupervisor do
 
     Beamwarden.ExternalWorkerRegistry
     |> Registry.select([{{:"$1", :_, :_}, [], [:"$1"]}])
-    |> Enum.map(&Beamwarden.ExternalWorker.snapshot/1)
+    |> Enum.flat_map(fn worker_id ->
+      try do
+        [Beamwarden.ExternalWorker.snapshot(worker_id)]
+      catch
+        :exit, _reason -> []
+      end
+    end)
     |> Enum.filter(fn snapshot ->
       is_nil(run_id) or value(snapshot, :run_id) == run_id
     end)

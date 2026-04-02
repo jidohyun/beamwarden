@@ -47,8 +47,6 @@ mix beamwarden workflow-status smoke-flow
 mix beamwarden advance-task smoke-flow 1 completed "done"
 ```
 
-Use `BEAMWARDEN_*` env vars for daemon discovery and configuration.
-
 ## Verification
 
 ```bash

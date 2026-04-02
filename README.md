@@ -39,7 +39,7 @@ The current repository is best understood as:
 
 The Elixir workspace currently provides:
 
-- a `mix beamwarden` CLI surface
+- a canonical `mix beamwarden` CLI surface
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
 - daemon-aware session/workflow routing
@@ -136,8 +136,6 @@ BEAMWARDEN_DAEMON_NODE=beamwarden_daemon@$(hostname -s) \
 BEAMWARDEN_DAEMON_COOKIE=clawcluster \
 mix beamwarden daemon-status
 ```
-
-Use `BEAMWARDEN_*` env vars for daemon discovery and configuration.
 
 ---
 

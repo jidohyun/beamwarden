@@ -57,7 +57,6 @@ mix beamwarden daemon-status
 ```
 
 Use the same cookie on every participating node. Shortname mode remains the default for local/same-host workflows.
-Use `BEAMWARDEN_*` env vars for daemon discovery and configuration.
 
 Representative local commands:
 

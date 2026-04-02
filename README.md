@@ -41,8 +41,8 @@ The Elixir workspace currently provides:
 - a canonical `mix beamwarden` CLI surface
 - daemon mode via `mix beamwarden daemon-run`
 - supervised sessions and workflows
-- tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, and `logs`
-- explicit event-stream follow semantics for `mix beamwarden logs <run-id> --follow`, with persisted history replayed first and newly persisted events streamed until completion/timeout
+- tmux-free local orchestration runs with `run`, `run-status`, `task-list`, `worker-list`, `retry-task`, `cancel-run`, `logs`, and cleanup commands
+- bounded event-stream follow semantics for `mix beamwarden logs <run-id> --follow`, with persisted history replayed first and newly persisted events streamed until completion/timeout
 - daemon-aware session/workflow routing
 - cluster ownership bookkeeping via `ledger.dets`
 - lightweight runtime continuity via `runtime.dets`
@@ -123,6 +123,7 @@ mix beamwarden cancel-run <run-id>
 mix beamwarden logs <run-id>
 mix beamwarden logs <run-id> --follow
 mix beamwarden cleanup-state --older-than-seconds 86400
+mix beamwarden cleanup-runs --ttl-seconds 86400
 mix beamwarden start-session --id smoke-session "review MCP tool"
 mix beamwarden session-status smoke-session
 ```
@@ -171,7 +172,7 @@ BEAMWARDEN_DAEMON_NAME_MODE=longnames \
 mix beamwarden daemon-status
 ```
 
-See the full operator guide:
+See the full operator guides:
 
 - `docs/elixir-daemon-operations.md`
 - `docs/elixir-orchestrator-operations.md`
@@ -282,7 +283,8 @@ Important limits to keep in mind:
 - payload durability is still weaker than ownership/routing durability
 - cross-host operation is documented and partially exercised, but not validated as a real multi-machine production deployment here
 - test-only cleanup can differ from long-running non-test runtime behavior
-- orchestrator snapshot/event retention is still Phase-2 style local persistence; lease-aware expiry/cleanup remains the next hardening slice
+- orchestration cleanup/retention is now available, but still **local-first** rather than lease-aware multi-node retention
+- `logs --follow` is an orchestration event follow mode, not a raw worker stdout/stderr tail
 
 ---
 

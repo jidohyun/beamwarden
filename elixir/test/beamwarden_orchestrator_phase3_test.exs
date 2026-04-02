@@ -11,7 +11,7 @@ defmodule BeamwardenOrchestratorPhase3Test do
       send(parent, {:follow_worker_started, task.task_id, task.attempt})
 
       receive do
-        :release_follow_worker -> {:ok, "follow complete"}
+        {:release_follow_worker, attempt} when attempt == task.attempt -> {:ok, "follow complete"}
       after
         1_500 -> {:error, "timed out waiting for follow release"}
       end
@@ -26,8 +26,8 @@ defmodule BeamwardenOrchestratorPhase3Test do
              )
 
     [task] = snapshot.tasks
-    task_id = task.task_id
-    assert_receive {:follow_worker_started, ^task_id, 1}, 1_000
+    [worker_id] = snapshot.worker_ids
+    assert_receive {:follow_worker_started, ^task.task_id, 1}, 1_000
 
     follower =
       Task.async(fn ->
@@ -46,7 +46,8 @@ defmodule BeamwardenOrchestratorPhase3Test do
       end)
 
     Process.sleep(100)
-    send(parent, :release_follow_worker)
+    assert {:ok, worker_pid} = Beamwarden.WorkerSupervisor.worker_pid(worker_id)
+    send(worker_pid, {:release_follow_worker, 1})
 
     output = Task.await(follower, 2_000)
 

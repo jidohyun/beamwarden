@@ -105,7 +105,8 @@ defmodule BeamwardenOrchestratorPhase4bScopeGuardTest do
       end)
 
     assert cleanup_output =~ "Cleanup Runs"
-    assert cleanup_output =~ "skipped_active_count=1"
+    refute cleanup_output =~ "deleted_runs=#{cleanup_run_id}"
+    refute cleanup_output =~ "deleted_event_runs=#{cleanup_run_id}"
     refute cleanup_output =~ "skip=active_lease"
     refute cleanup_output =~ "skip=recovery_window"
     refute cleanup_output =~ "skip=reachable_owner"

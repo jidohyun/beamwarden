@@ -6,6 +6,7 @@ defmodule BeamwardenOrchestratorPhase3Test do
   test "logs --follow streams events until the run reaches a terminal state" do
     run_id = unique_id("phase3-follow")
     parent = self()
+    worker_id = "#{run_id}-worker-1"
 
     executor = fn task ->
       send(parent, {:follow_worker_started, task.task_id, task.attempt})
@@ -46,7 +47,8 @@ defmodule BeamwardenOrchestratorPhase3Test do
       end)
 
     Process.sleep(100)
-    send(parent, :release_follow_worker)
+    assert {:ok, worker_pid} = Beamwarden.WorkerSupervisor.worker_pid(worker_id)
+    send(worker_pid, :release_follow_worker)
 
     output = Task.await(follower, 2_000)
 

@@ -342,7 +342,7 @@ defmodule Beamwarden.Orchestrator do
 
     receive do
       {:beamwarden_log_broker, ^run_id, event} ->
-        next_cursor = max(cursor, value(event, :seq) || cursor)
+        next_cursor = max(cursor, event_seq(event) || cursor)
         sink.(render_event(event))
 
         {:ok, latest_snapshot} = run_snapshot(run_id)
@@ -402,7 +402,7 @@ defmodule Beamwarden.Orchestrator do
           |> mark_event_source("degraded-persisted")
           |> Enum.reduce(cursor, fn event, acc ->
             sink.(render_event(event))
-            max(acc, value(event, :seq) || acc)
+            max(acc, event_seq(event) || acc)
           end)
 
         {:ok, latest_snapshot} = run_snapshot(run_id)
@@ -455,13 +455,14 @@ defmodule Beamwarden.Orchestrator do
   end
 
   defp last_event_seq([]), do: 0
-  defp last_event_seq(events), do: events |> List.last() |> value(:seq) || 0
+  defp last_event_seq(events), do: events |> List.last() |> event_seq() || 0
 
   defp format_event(event) do
     [
       "[#{value(event, :timestamp)}]",
       value(event, :type),
-      maybe_text("seq", value(event, :seq)),
+      maybe_text("event_seq", event_seq(event)),
+      maybe_text("seq", event_seq(event)),
       maybe_text("source", value(event, :source)),
       maybe_text("task_id", value(event, :task_id)),
       maybe_text("worker_id", value(event, :worker_id)),
@@ -488,4 +489,7 @@ defmodule Beamwarden.Orchestrator do
       true -> nil
     end
   end
+
+  defp event_seq(nil), do: nil
+  defp event_seq(event), do: value(event, :event_seq) || value(event, :seq)
 end

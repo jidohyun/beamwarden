@@ -126,8 +126,10 @@ defmodule Beamwarden.LogBroker do
   end
 
   defp last_seq([]), do: 0
-  defp last_seq(events), do: events |> List.last() |> value(:seq) || 0
+  defp last_seq(events), do: events |> List.last() |> event_seq() || 0
 
   defp value(nil, _key), do: nil
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  defp event_seq(nil), do: nil
+  defp event_seq(entry), do: value(entry, :event_seq) || value(entry, :seq)
 end

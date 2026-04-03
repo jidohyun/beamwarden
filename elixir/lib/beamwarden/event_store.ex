@@ -3,6 +3,7 @@ defmodule Beamwarden.EventStore do
 
   def append(run_id, event) do
     File.mkdir_p!(Beamwarden.event_root())
+    event_seq = next_seq(run_id)
 
     entry =
       event
@@ -10,7 +11,8 @@ defmodule Beamwarden.EventStore do
       |> Map.put_new(:run_id, run_id)
       |> Map.put_new(:timestamp, now())
       |> Map.put_new(:persisted_at, now())
-      |> Map.put_new(:seq, next_seq(run_id))
+      |> Map.put_new(:seq, event_seq)
+      |> Map.put_new(:event_seq, event_seq)
 
     Beamwarden.event_path(run_id)
     |> File.write!(JSON.encode!(entry) <> "\n", [:append])
@@ -47,7 +49,7 @@ defmodule Beamwarden.EventStore do
   def last_seq(run_id) do
     read_entries(run_id)
     |> List.last()
-    |> value(:seq)
+    |> event_seq()
     |> Kernel.||(0)
   end
 
@@ -61,11 +63,14 @@ defmodule Beamwarden.EventStore do
         |> Enum.map(&JSON.decode!/1)
         |> Enum.with_index(1)
         |> Enum.map(fn {entry, index} ->
+          event_seq = event_seq(entry) || index
+
           entry
           |> Map.put_new("run_id", run_id)
           |> Map.put_new("timestamp", now())
           |> Map.put_new("persisted_at", value(entry, :timestamp) || now())
-          |> Map.put_new("seq", index)
+          |> Map.put_new("seq", event_seq)
+          |> Map.put_new("event_seq", event_seq)
         end)
 
       {:error, :enoent} ->
@@ -75,6 +80,8 @@ defmodule Beamwarden.EventStore do
 
   defp value(nil, _key), do: nil
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  defp event_seq(nil), do: nil
+  defp event_seq(entry), do: value(entry, :event_seq) || value(entry, :seq)
 
   defp now do
     DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()

@@ -135,6 +135,11 @@ defmodule Beamwarden.ExternalWorker do
     {:noreply, next_state}
   end
 
+  @impl true
+  def handle_info(_message, %__MODULE__{} = state) do
+    {:noreply, state}
+  end
+
   defp execute_task(task, %__MODULE__{executor: executor}) when is_function(executor, 1) do
     executor.(normalize_task(task))
   end

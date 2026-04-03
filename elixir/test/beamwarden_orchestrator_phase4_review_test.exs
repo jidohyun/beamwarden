@@ -101,11 +101,16 @@ defmodule BeamwardenOrchestratorPhase4ReviewTest do
     output = Beamwarden.Orchestrator.render_workers(workers)
 
     assert output =~ "active_count=1"
+    assert output =~ "stale_count=1"
     assert output =~ "persisted_only_count=1"
     assert output =~ "worker_id=#{run_id}-worker-1"
     assert output =~ "presence=active"
+    assert output =~ "health_state=active"
     assert output =~ "worker_id=#{persisted_worker_id}"
     assert output =~ "presence=persisted"
+    assert output =~ "health_state=stale"
+    assert output =~ "health_reason=heartbeat_expired"
+    assert output =~ "heartbeat_timeout_at=2000-01-01T00:00:30Z"
   end
 
   test "cleanup-state skips active runs, workers, and event files even at zero-second retention" do

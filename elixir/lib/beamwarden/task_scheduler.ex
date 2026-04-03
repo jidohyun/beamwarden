@@ -10,16 +10,16 @@ defmodule Beamwarden.TaskScheduler do
         run_id: run_id,
         title: summarize_prompt(prompt),
         payload: prompt,
-      attempt: 1,
-      status: "pending",
-      assigned_worker: nil,
-      recovery_reason: nil,
-      recovered_from_attempt: nil,
-      recovered_from_worker_id: nil,
-      result_summary: nil,
-      error: nil,
-      created_at: now,
-      updated_at: now
+        attempt: 1,
+        status: "pending",
+        assigned_worker: nil,
+        recovery_reason: nil,
+        recovered_from_attempt: nil,
+        recovered_from_worker_id: nil,
+        result_summary: nil,
+        error: nil,
+        created_at: now,
+        updated_at: now
       }
     ]
   end

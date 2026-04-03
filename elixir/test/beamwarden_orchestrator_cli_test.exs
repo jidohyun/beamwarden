@@ -44,6 +44,8 @@ defmodule BeamwardenOrchestratorCliTest do
     assert task_output =~ "attempt=1"
     assert task_output =~ "summary=review this repo"
     assert worker_output =~ "active_count="
+    assert worker_output =~ "stale_count="
+    assert worker_output =~ "health_state="
     assert worker_output =~ "presence=active"
     assert worker_output =~ "run_id=#{run_id}"
   end
@@ -133,6 +135,7 @@ defmodule BeamwardenOrchestratorCliTest do
 
     assert worker_output =~ "persisted_only_count="
     assert worker_output =~ "presence=persisted"
+    assert worker_output =~ "health_state="
   end
 
   defp unique_id(prefix) do

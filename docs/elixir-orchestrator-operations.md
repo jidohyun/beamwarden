@@ -39,8 +39,8 @@ That distinction matters because a persisted row is **not** proof that the worke
 
 Recommended operator reading:
 
-- trust `state` + `current_task_id` for live runtime activity
-- use `started_at`, `heartbeat_at`, and `last_event_at` to judge freshness
+- trust `health_state` first: `active` means the last heartbeat is still within the worker timeout, `stale` means the heartbeat window has expired
+- use `heartbeat_at` + `heartbeat_timeout_at` to explain why a row is active or stale
 - treat persisted-only rows as recovery/debugging evidence rather than liveness
 
 ## Lifecycle commands

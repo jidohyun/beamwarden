@@ -166,13 +166,15 @@ defmodule Beamwarden.Orchestrator do
   end
 
   def render_workers(workers) do
-    active_count = Enum.count(workers, &truthy?(&1, :active))
+    active_count = Enum.count(workers, &(value(&1, :health_state) == "active"))
+    stale_count = Enum.count(workers, &(value(&1, :health_state) == "stale"))
     persisted_only_count = Enum.count(workers, &(value(&1, :presence) == "persisted"))
 
     [
       "Workers",
       "",
       "active_count=#{active_count}",
+      "stale_count=#{stale_count}",
       "persisted_only_count=#{persisted_only_count}",
       if(workers == [],
         do: "none",
@@ -184,11 +186,16 @@ defmodule Beamwarden.Orchestrator do
                 "run_id=#{value(worker, :run_id)}",
                 "presence=#{value(worker, :presence) || "unknown"}",
                 "state=#{value(worker, :state)}",
+                "health_state=#{value(worker, :health_state) || "unknown"}",
                 "current_task_id=#{value(worker, :current_task_id) || "none"}",
                 "active_state=#{value(worker, :runtime_state) || "none"}",
                 "persisted_state=#{value(worker, :persisted_state) || "none"}",
                 "active_current_task_id=#{value(worker, :active_current_task_id) || "none"}",
                 "persisted_current_task_id=#{value(worker, :persisted_current_task_id) || "none"}",
+                maybe_text("health_reason", value(worker, :health_reason)),
+                maybe_text("heartbeat_at", value(worker, :heartbeat_at)),
+                maybe_text("heartbeat_timeout_at", value(worker, :heartbeat_timeout_at)),
+                maybe_text("heartbeat_age_seconds", value(worker, :heartbeat_age_seconds)),
                 maybe_text("last_task_status", value(worker, :last_task_status)),
                 maybe_text("persisted_state", persisted_state_text(worker)),
                 maybe_text("last_result", value(worker, :last_result_summary))

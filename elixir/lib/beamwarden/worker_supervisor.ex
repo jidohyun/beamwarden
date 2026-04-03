@@ -3,6 +3,8 @@ defmodule Beamwarden.WorkerSupervisor do
 
   use DynamicSupervisor
 
+  @default_worker_heartbeat_timeout_seconds 30
+
   def start_link(opts \\ []) do
     DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -34,6 +36,7 @@ defmodule Beamwarden.WorkerSupervisor do
 
   def list_workers(opts \\ []) do
     run_id = Keyword.get(opts, :run_id)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     live =
       list_live_workers(run_id: run_id)
@@ -48,8 +51,10 @@ defmodule Beamwarden.WorkerSupervisor do
       live_snapshot = Map.get(live, worker_id)
       persisted_snapshot = Map.get(persisted, worker_id)
       preferred = live_snapshot || persisted_snapshot || %{}
+      health = worker_health(preferred, live_snapshot, persisted_snapshot, now)
 
       preferred
+      |> Map.merge(health)
       |> Map.put(:worker_id, worker_id)
       |> Map.put(:presence, if(is_map(live_snapshot), do: "active", else: "persisted"))
       |> Map.put(:active, is_map(live_snapshot))
@@ -99,4 +104,59 @@ defmodule Beamwarden.WorkerSupervisor do
 
   defp value(nil, _key), do: nil
   defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
+
+  defp worker_health(preferred, _live_snapshot, persisted_snapshot, now) do
+    heartbeat_at = value(preferred, :heartbeat_at) || value(persisted_snapshot, :heartbeat_at)
+
+    case heartbeat_window(heartbeat_at, now) do
+      {:ok, %{age_seconds: age_seconds, timeout_at: timeout_at}, stale?} ->
+        %{
+          heartbeat_at: heartbeat_at,
+          heartbeat_age_seconds: age_seconds,
+          heartbeat_timeout_at: DateTime.to_iso8601(timeout_at),
+          health_state: if(stale?, do: "stale", else: "active"),
+          health_reason: if(stale?, do: "heartbeat_expired", else: "heartbeat_recent")
+        }
+
+      {:error, :missing} ->
+        %{
+          heartbeat_at: nil,
+          heartbeat_age_seconds: nil,
+          heartbeat_timeout_at: nil,
+          health_state: "stale",
+          health_reason: "heartbeat_missing"
+        }
+
+      {:error, :invalid} ->
+        %{
+          heartbeat_at: heartbeat_at,
+          heartbeat_age_seconds: nil,
+          heartbeat_timeout_at: nil,
+          health_state: "stale",
+          health_reason: "heartbeat_invalid"
+        }
+    end
+  end
+
+  defp heartbeat_window(nil, _now), do: {:error, :missing}
+
+  defp heartbeat_window(heartbeat_at, now) do
+    with {:ok, heartbeat_at, _offset} <- DateTime.from_iso8601(heartbeat_at) do
+      timeout_at = DateTime.add(heartbeat_at, worker_heartbeat_timeout_seconds(), :second)
+
+      {:ok,
+       %{age_seconds: max(DateTime.diff(now, heartbeat_at, :second), 0), timeout_at: timeout_at},
+       DateTime.compare(timeout_at, now) == :lt}
+    else
+      _ -> {:error, :invalid}
+    end
+  end
+
+  defp worker_heartbeat_timeout_seconds do
+    Application.get_env(
+      :beamwarden,
+      :worker_heartbeat_timeout_seconds,
+      @default_worker_heartbeat_timeout_seconds
+    )
+  end
 end

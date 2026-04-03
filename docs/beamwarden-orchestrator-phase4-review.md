@@ -35,6 +35,18 @@ The current runtime now establishes the operator contract that later Phase 4 wor
 
 That means Phase 4 is not a greenfield design. It is a hardening/extension phase for a runtime that already has useful CLI affordances.
 
+## Phase 4B scope guard
+
+The next worker-liveness slice is intentionally **worker-list only**. Until the broader lifecycle/lease phases land, it should:
+
+- keep `run-status` focused on run lifecycle fields
+- keep `task-list` focused on task assignment/result fields
+- avoid expanding cleanup output into lease-aware skip-reason reporting
+- avoid introducing raw worker stdout/stderr live tailing
+- avoid adding a TUI/monitor surface
+
+The regression guard for that boundary lives in `elixir/test/beamwarden_orchestrator_phase4b_scope_guard_test.exs`.
+
 ## Phase 4 review goals
 
 Phase 4 should make Beamwarden materially stronger in three linked areas.

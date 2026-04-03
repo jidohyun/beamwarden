@@ -43,6 +43,25 @@ Recommended operator reading:
 - use `heartbeat_at` + `heartbeat_timeout_at` to explain why a row is active or stale
 - treat persisted-only rows as recovery/debugging evidence rather than liveness
 
+## Task recovery reporting
+
+`task-list <run-id>` stays task-focused, but it now adds a compact explanation layer:
+
+- `assignment_state=unassigned|leased|lost_lease|requeued|terminal`
+- `recovery_reason=worker_expired|node_down|daemon_restart|operator_retry|cancel_requested` when a reason is known
+- `lease_expires_at=<iso8601>` when a lost lease is what explains the row
+- `recovered_from_attempt` / `recovered_from_worker` for operator-triggered retries
+
+Recommended operator reading:
+
+- healthy queued tasks should read as `assignment_state=unassigned`
+- healthy in-flight tasks should read as `assignment_state=leased` without extra recovery noise
+- `assignment_state=lost_lease` means the task is still non-terminal but its previous lease is no longer trustworthy
+- `recovery_reason=daemon_restart` means the persisted run snapshot survived but no live `RunServer` is registered
+- `recovery_reason=node_down` means the assigned worker only exists as a persisted row
+- `recovery_reason=worker_expired` means the assigned worker heartbeat window elapsed
+- `recovery_reason=operator_retry` / `cancel_requested` distinguishes operator-driven transitions from automatic recovery evidence
+
 ## Lifecycle commands
 
 ### `retry-task <run-id> <task-id>`

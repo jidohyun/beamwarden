@@ -10,13 +10,16 @@ defmodule Beamwarden.TaskScheduler do
         run_id: run_id,
         title: summarize_prompt(prompt),
         payload: prompt,
-        attempt: 1,
-        status: "pending",
-        assigned_worker: nil,
-        result_summary: nil,
-        error: nil,
-        created_at: now,
-        updated_at: now
+      attempt: 1,
+      status: "pending",
+      assigned_worker: nil,
+      recovery_reason: nil,
+      recovered_from_attempt: nil,
+      recovered_from_worker_id: nil,
+      result_summary: nil,
+      error: nil,
+      created_at: now,
+      updated_at: now
       }
     ]
   end
@@ -94,6 +97,7 @@ defmodule Beamwarden.TaskScheduler do
             |> put(:status, "cancelled")
             |> put(:result_summary, nil)
             |> put(:error, nil)
+            |> put(:recovery_reason, "cancel_requested")
             |> put(:updated_at, now),
             %{counts | cancelled: counts.cancelled + 1}
           }
@@ -104,6 +108,7 @@ defmodule Beamwarden.TaskScheduler do
             |> put(:status, "cancel_requested")
             |> put(:result_summary, nil)
             |> put(:error, nil)
+            |> put(:recovery_reason, "cancel_requested")
             |> put(:updated_at, now),
             %{counts | requested: counts.requested + 1}
           }
@@ -137,6 +142,9 @@ defmodule Beamwarden.TaskScheduler do
             |> put(:attempt, (value(task, :attempt) || 1) + 1)
             |> put(:status, "pending")
             |> put(:assigned_worker, nil)
+            |> put(:recovery_reason, "operator_retry")
+            |> put(:recovered_from_attempt, value(task, :attempt) || 1)
+            |> put(:recovered_from_worker_id, value(task, :assigned_worker))
             |> put(:result_summary, nil)
             |> put(:error, nil)
             |> put(:updated_at, now())
@@ -227,6 +235,9 @@ defmodule Beamwarden.TaskScheduler do
       attempt: value(task, :attempt) || 1,
       status: value(task, :status),
       assigned_worker: value(task, :assigned_worker),
+      recovery_reason: value(task, :recovery_reason),
+      recovered_from_attempt: value(task, :recovered_from_attempt),
+      recovered_from_worker_id: value(task, :recovered_from_worker_id),
       result_summary: value(task, :result_summary),
       error: value(task, :error),
       created_at: value(task, :created_at),

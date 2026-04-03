@@ -1,7 +1,9 @@
 # Beamwarden Orchestrator Phase 4 Implementation Plan
 
 ## Status
-Proposed
+In progress
+
+> Update on 2026-04-03: the Phase 4A log-broker slice is now landed locally. `logs --follow` keeps the same CLI shape while replaying seq-backed history, attaching to `Beamwarden.LogBroker` for live delivery, and degrading explicitly to persisted polling when broker attach is unavailable.
 
 ## Depends on
 - `docs/plans/2026-04-02-beamwarden-orchestrator-design.md`

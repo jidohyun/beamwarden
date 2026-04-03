@@ -12,6 +12,17 @@ It is grounded in the repository state after the current Phase 3 work:
 
 Phase 4 should **extend those primitives**, not replace them with a brand-new transport or control plane.
 
+## Phase 4A shipped now
+
+The current repo now lands the first Phase 4 slice:
+
+- `Beamwarden.LogBroker` is the local-first boundary for append + subscribe delivery
+- `Beamwarden.EventStore` persists monotonic per-run `seq` values and supports `list_since/2`
+- `Beamwarden.Orchestrator.follow_logs/3` replays broker backlog with `source=replay`, emits `follow=history seq=<n>`, then attaches to live broker delivery with `follow=live broker_node=<node> seq=<n>`
+- when broker attach is disabled/unavailable, follow mode degrades honestly with `follow=degraded-persisted reason=<reason>` and `source=degraded-persisted`
+
+That means the operator contract is already more honest than Phase 3 while staying local-first and CLI-compatible.
+
 ## What is shipped now
 
 The current runtime already establishes the operator contract that Phase 4 must preserve:
@@ -30,29 +41,25 @@ Phase 4 should make Beamwarden materially stronger in three linked areas.
 
 ### 1. True live log broker semantics beyond persisted replay
 
-Current gap:
+Current gap after Phase 4A:
 
-- `follow_logs/3` only polls `EventStore.list/1`
-- `EventStore` is append-only JSONL with no event ids, cursors, or subscriber semantics
-- `ExternalWorker` returns a single final summary/error rather than a live event stream
+- broker-backed follow now exists, but worker payloads are still compact lifecycle/result summaries rather than richer progress frames
+- the broker is still local-first; remote broker attach remains future work
+- `ExternalWorker` still returns a single final summary/error rather than a richer progress stream
 
 Required Phase 4 outcome:
 
-- `logs --follow` keeps the same command shape but becomes broker-backed
+- `logs --follow` keeps the same command shape and is now broker-backed
 - the broker can replay persisted history **and** deliver live events without waiting for a file poll round-trip
 - every emitted line clearly labels whether it came from `source=replay` or `source=live`
 - live follow remains compact and operator-first; it must not degrade into an unreadable raw transport dump
 
-Concrete design direction:
+Phase 4A implementation notes:
 
-- add a per-run `Beamwarden.LogBroker` process under orchestration supervision
-- assign monotonic broker sequence numbers / event ids to each run event
-- keep `EventStore` as the durable source of truth, but append through the broker so the same event can be:
-  - persisted
-  - fanned out to subscribers
-  - checkpointed for later resume/cursor-based follow
-- extend `ExternalWorker` so progress/stdout/stderr summaries flow through broker events instead of only final completion text
-- keep `logs <run-id>` compact by rendering broker-persisted summaries, not raw chunk streams, unless a later additive option explicitly asks for chunk detail
+- `Beamwarden.LogBroker` currently runs as a local orchestration child and serializes append + fanout
+- per-run `seq` cursors are persisted in the event envelopes themselves, not in a separate index service
+- replay/live follow shares one cursor contract via `subscribe(run_id, after_seq)`
+- `logs <run-id>` remains compact and summary-first; this slice intentionally does **not** add raw stdout/stderr tailing
 
 ### 2. Stronger multi-node lifecycle semantics
 

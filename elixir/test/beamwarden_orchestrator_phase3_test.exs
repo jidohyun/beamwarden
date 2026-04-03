@@ -3,7 +3,7 @@ defmodule BeamwardenOrchestratorPhase3Test do
 
   import ExUnit.CaptureIO
 
-  test "logs --follow streams events until the run reaches a terminal state" do
+  test "logs --follow replays history, attaches to the live broker, and completes without duplicates" do
     run_id = unique_id("phase3-follow")
     parent = self()
     worker_id = "#{run_id}-worker-1"
@@ -53,13 +53,19 @@ defmodule BeamwardenOrchestratorPhase3Test do
     output = Task.await(follower, 2_000)
 
     assert output =~ "Run Logs"
-    assert output =~ "event_source=runtime"
+    assert output =~ "event_source=replay"
     assert output =~ "follow_supported=true"
-    assert output =~ "follow=streaming"
+    assert output =~ "cursor="
+    assert output =~ "follow=history seq="
+    assert output =~ "follow=live broker_node="
+    assert output =~ "source=replay"
+    assert output =~ "source=live"
     assert output =~ "task_assigned"
+    assert output =~ "seq="
     assert output =~ "follow=complete status="
     assert output =~ "run_"
     assert output =~ "task_"
+    assert length(Regex.scan(~r/task_assigned/, output)) == 1
   end
 
   test "cleanup-state removes expired persisted runs, workers, and events" do

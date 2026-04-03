@@ -13,6 +13,7 @@ defmodule Beamwarden.OrchestratorSupervisor do
       {Registry, keys: :unique, name: Beamwarden.RunRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: Beamwarden.RunSupervisor},
       {Registry, keys: :unique, name: Beamwarden.ExternalWorkerRegistry},
+      {Beamwarden.LogBroker, []},
       {Beamwarden.WorkerSupervisor, []}
     ]
 

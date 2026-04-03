@@ -9,6 +9,8 @@ defmodule Beamwarden.EventStore do
       |> Map.new()
       |> Map.put_new(:run_id, run_id)
       |> Map.put_new(:timestamp, now())
+      |> Map.put_new(:persisted_at, now())
+      |> Map.put_new(:seq, next_seq(run_id))
 
     Beamwarden.event_path(run_id)
     |> File.write!(JSON.encode!(entry) <> "\n", [:append])
@@ -17,16 +19,11 @@ defmodule Beamwarden.EventStore do
   end
 
   def list(run_id) do
-    case File.read(Beamwarden.event_path(run_id)) do
-      {:ok, contents} ->
-        {:ok,
-         contents
-         |> String.split("\n", trim: true)
-         |> Enum.map(&JSON.decode!/1)}
+    {:ok, read_entries(run_id)}
+  end
 
-      {:error, :enoent} ->
-        {:ok, []}
-    end
+  def list_since(run_id, seq) when is_integer(seq) and seq >= 0 do
+    {:ok, Enum.filter(read_entries(run_id), &(value(&1, :seq) > seq))}
   end
 
   def delete(run_id) do
@@ -46,6 +43,38 @@ defmodule Beamwarden.EventStore do
     |> Enum.map(&Path.basename(&1, ".jsonl"))
     |> Enum.sort()
   end
+
+  def last_seq(run_id) do
+    read_entries(run_id)
+    |> List.last()
+    |> value(:seq)
+    |> Kernel.||(0)
+  end
+
+  defp next_seq(run_id), do: last_seq(run_id) + 1
+
+  defp read_entries(run_id) do
+    case File.read(Beamwarden.event_path(run_id)) do
+      {:ok, contents} ->
+        contents
+        |> String.split("\n", trim: true)
+        |> Enum.map(&JSON.decode!/1)
+        |> Enum.with_index(1)
+        |> Enum.map(fn {entry, index} ->
+          entry
+          |> Map.put_new("run_id", run_id)
+          |> Map.put_new("timestamp", now())
+          |> Map.put_new("persisted_at", value(entry, :timestamp) || now())
+          |> Map.put_new("seq", index)
+        end)
+
+      {:error, :enoent} ->
+        []
+    end
+  end
+
+  defp value(nil, _key), do: nil
+  defp value(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
 
   defp now do
     DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()

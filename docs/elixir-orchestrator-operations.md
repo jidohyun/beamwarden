@@ -26,7 +26,7 @@ mix beamwarden cleanup-runs --ttl-seconds 86400
 ```
 
 `logs` should always provide a persisted summary view.
-`logs --follow` is intentionally conservative: it replays the currently available event snapshot first, emits `follow=streaming`, then streams newly persisted orchestration events until the run reaches a terminal state or the follow timeout expires. It still avoids pretending that Beamwarden is tailing raw worker stdout/stderr directly.
+`logs --follow` now replays the currently available event snapshot with stable `seq` cursors, emits `follow=history seq=<n>`, then attaches to the local log broker with `follow=live broker_node=<node> seq=<n>`. If the broker cannot be reached, Beamwarden degrades explicitly to persisted polling with `follow=degraded-persisted reason=<reason>`. It still avoids pretending that Beamwarden is tailing raw worker stdout/stderr directly.
 
 ## Worker reporting: active vs persisted
 
@@ -78,32 +78,25 @@ This is a **best-effort local orchestration stop**, not a distributed consensus 
 The useful minimum is:
 
 - recent orchestration events (`run_started`, `task_assigned`, `task_completed`, `task_failed`, `task_retried`, `run_cancelled`)
-- follow-mode output should emit only new persisted event lines after the initial snapshot
+- follow-mode output should keep `seq=<n>` cursors stable across replay/live/degraded follow
 - worker output summaries or final result/error text
 - timestamps that let operators correlate the event stream with `run-status` and `worker-list`
 - explicit metadata for `run_status`, `run_lifecycle`, and `event_source` so operators know whether they are reading a live runtime view or a persisted snapshot
+- per-event `source=replay|live|degraded-persisted` labels so operators can tell which transport path produced a line
 
 That gives Beamwarden an answer to "what happened?" even after the worker process is gone.
 
 ### Current `--follow` contract
 
-Until Beamwarden grows a richer log broker/follower, operators should read `logs <run-id> --follow` as:
-
-- render the currently persisted event history first
-- emit an explicit `follow=streaming` marker before polling for newly persisted orchestration events
-- stop with a terminal marker such as `follow=complete status=<state>` or `follow=timeout status=<state>`
-- avoid implying that the CLI is attached directly to a running worker stdout/stderr stream
-
-That keeps the interface honest while preserving a stable command shape for the later streaming implementation.
-
-### Phase 4 target `--follow` contract
-
-The current command shape should stay the same, but the implementation should become broker-backed:
+The current command shape stays the same, but the runtime is now broker-backed:
 
 - replay persisted history up to a stable cursor/sequence
 - attach to a live broker on the current owner node when one is available
+- label replayed lines as `source=replay`
+- label broker-delivered lines as `source=live`
 - emit an explicit live marker such as `follow=live broker_node=<node> seq=<n>`
 - degrade explicitly to persisted polling with a marker such as `follow=degraded-persisted reason=<reason>` when broker attach fails
+- label fallback polled lines as `source=degraded-persisted`
 - preserve terminal markers such as `follow=complete status=<state> seq=<n>` and `follow=timeout status=<state> seq=<n>`
 
 That gives operators a real live stream without changing the CLI contract or pretending every line is raw stdout/stderr.
@@ -146,9 +139,9 @@ Phase 4 is the broker/lifecycle/retention hardening slice. The current Phase 3 r
 Phase 4 should keep the same operator commands while making three concrete improvements:
 
 1. **broker-backed live follow**
-   - `logs <run-id> --follow` should still replay persisted history first
-   - after replay, follow should switch to a true live broker path rather than polling only for newly persisted rows
-   - the rendered stream should label `source=replay` vs `source=live` so operators can tell what they are seeing
+   - `logs <run-id> --follow` replays persisted history first
+   - after replay, follow switches to the local broker path and only falls back to polling when attach fails
+   - the rendered stream labels `source=replay`, `source=live`, and `source=degraded-persisted`
 2. **multi-node lifecycle clarity**
    - `run-status`, `task-list`, and `worker-list` should distinguish `active`, `stale`, `expired`, `cancel_requested`, `cancelled`, `failed`, and `recovered`
    - recovery should append explicit events before a task is requeued or moved

@@ -105,12 +105,8 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_csv(label, values), do: "#{label}=#{Enum.join(values, ",")}"
 
   def follow_logs(run_id, sink, opts \\ []) when is_function(sink, 1) do
-    with {:ok, snapshot} <- run_snapshot(run_id),
-         {:ok, events} <- Beamwarden.EventStore.list(run_id) do
-      sink.(render_logs(log_report(run_id, snapshot, events, follow_supported: true)))
-
-      sink.("follow=streaming")
-      do_follow_logs(run_id, length(events), sink, snapshot, opts)
+    with {:ok, snapshot} <- run_snapshot(run_id) do
+      follow_via_broker_or_poll(run_id, snapshot, sink, opts)
     end
   end
 
@@ -217,6 +213,8 @@ defmodule Beamwarden.Orchestrator do
       "run_lifecycle=#{value(report, :run_lifecycle)}",
       "event_source=#{value(report, :source) || "persisted"}",
       "follow_supported=#{value(report, :follow_supported)}",
+      maybe_text("cursor", value(report, :cursor)),
+      maybe_text("broker_node", value(report, :broker_node)),
       "event_count=#{length(events)}",
       if(events == [],
         do: "none",
@@ -270,13 +268,116 @@ defmodule Beamwarden.Orchestrator do
       run_id: run_id,
       run_status: value(snapshot, :status),
       run_lifecycle: value(snapshot, :lifecycle) || "active",
-      source: if(active?, do: "runtime", else: "persisted"),
+      source: Keyword.get(opts, :source, if(active?, do: "runtime", else: "persisted")),
       follow_supported: Keyword.get(opts, :follow_supported, active?),
+      cursor: Keyword.get(opts, :cursor, last_event_seq(events)),
+      broker_node: Keyword.get(opts, :broker_node),
       events: events
     }
   end
 
-  defp do_follow_logs(run_id, seen_count, sink, snapshot, opts) do
+  defp follow_via_broker_or_poll(run_id, snapshot, sink, opts) do
+    after_seq = Keyword.get(opts, :after_seq, 0)
+
+    case attach_follow_stream(run_id, after_seq, opts) do
+      {:ok, %{backlog: backlog, broker_node: broker_node, cursor: cursor}} ->
+        sink.(
+          render_logs(
+            log_report(run_id, snapshot, backlog,
+              source: "replay",
+              follow_supported: true,
+              cursor: cursor,
+              broker_node: broker_node
+            )
+          )
+        )
+
+        sink.("follow=history seq=#{cursor}")
+
+        cond do
+          terminal_status?(value(snapshot, :status)) ->
+            Beamwarden.LogBroker.unsubscribe(run_id)
+            sink.("follow=complete status=#{value(snapshot, :status)} seq=#{cursor}")
+            :ok
+
+          true ->
+            sink.("follow=live broker_node=#{broker_node} seq=#{cursor}")
+            do_follow_broker_logs(run_id, cursor, sink, snapshot, opts)
+        end
+
+      {:error, reason} ->
+        {:ok, backlog} = Beamwarden.EventStore.list_since(run_id, after_seq)
+        cursor = max(after_seq, last_event_seq(backlog))
+
+        sink.(
+          render_logs(
+            log_report(run_id, snapshot, mark_event_source(backlog, "replay"),
+              source: "degraded-persisted",
+              follow_supported: true,
+              cursor: cursor
+            )
+          )
+        )
+
+        sink.("follow=history seq=#{cursor}")
+
+        cond do
+          terminal_status?(value(snapshot, :status)) ->
+            sink.("follow=complete status=#{value(snapshot, :status)} seq=#{cursor}")
+            :ok
+
+          true ->
+            sink.("follow=degraded-persisted reason=#{format_reason(reason)}")
+            do_follow_persisted_logs(run_id, cursor, sink, snapshot, opts)
+        end
+    end
+  end
+
+  defp do_follow_broker_logs(run_id, cursor, sink, snapshot, opts) do
+    interval_ms = Keyword.get(opts, :interval_ms, 50)
+    timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
+
+    started_at =
+      Keyword.get_lazy(opts, :started_at, fn -> System.monotonic_time(:millisecond) end)
+
+    receive do
+      {:beamwarden_log_broker, ^run_id, event} ->
+        next_cursor = max(cursor, value(event, :seq) || cursor)
+        sink.(render_event(event))
+
+        {:ok, latest_snapshot} = run_snapshot(run_id)
+
+        do_follow_broker_logs(run_id, next_cursor, sink, latest_snapshot,
+          interval_ms: interval_ms,
+          timeout_ms: timeout_ms,
+          started_at: started_at
+        )
+    after
+      interval_ms ->
+        cond do
+          terminal_status?(value(snapshot, :status)) ->
+            Beamwarden.LogBroker.unsubscribe(run_id)
+            sink.("follow=complete status=#{value(snapshot, :status)} seq=#{cursor}")
+            :ok
+
+          System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
+            Beamwarden.LogBroker.unsubscribe(run_id)
+            sink.("follow=timeout status=#{value(snapshot, :status)} seq=#{cursor}")
+            :ok
+
+          true ->
+            {:ok, latest_snapshot} = run_snapshot(run_id)
+
+            do_follow_broker_logs(run_id, cursor, sink, latest_snapshot,
+              interval_ms: interval_ms,
+              timeout_ms: timeout_ms,
+              started_at: started_at
+            )
+        end
+    end
+  end
+
+  defp do_follow_persisted_logs(run_id, cursor, sink, snapshot, opts) do
     interval_ms = Keyword.get(opts, :interval_ms, 50)
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
 
@@ -285,24 +386,28 @@ defmodule Beamwarden.Orchestrator do
 
     cond do
       terminal_status?(value(snapshot, :status)) ->
-        sink.("follow=complete status=#{value(snapshot, :status)}")
+        sink.("follow=complete status=#{value(snapshot, :status)} seq=#{cursor}")
         :ok
 
       System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
-        sink.("follow=timeout status=#{value(snapshot, :status)}")
+        sink.("follow=timeout status=#{value(snapshot, :status)} seq=#{cursor}")
         :ok
 
       true ->
         Process.sleep(interval_ms)
-        {:ok, events} = Beamwarden.EventStore.list(run_id)
+        {:ok, events} = Beamwarden.EventStore.list_since(run_id, cursor)
 
-        events
-        |> Enum.drop(seen_count)
-        |> Enum.each(&sink.(render_event(&1)))
+        next_cursor =
+          events
+          |> mark_event_source("degraded-persisted")
+          |> Enum.reduce(cursor, fn event, acc ->
+            sink.(render_event(event))
+            max(acc, value(event, :seq) || acc)
+          end)
 
         {:ok, latest_snapshot} = run_snapshot(run_id)
 
-        do_follow_logs(run_id, length(events), sink, latest_snapshot,
+        do_follow_persisted_logs(run_id, next_cursor, sink, latest_snapshot,
           interval_ms: interval_ms,
           timeout_ms: timeout_ms,
           started_at: started_at
@@ -335,10 +440,29 @@ defmodule Beamwarden.Orchestrator do
 
   defp terminal_status?(status), do: status in ["completed", "failed", "cancelled"]
 
+  defp attach_follow_stream(run_id, after_seq, opts) do
+    case if(Keyword.get(opts, :broker, true) == false, do: {:error, :broker_disabled}, else: :ok) do
+      :ok -> Beamwarden.LogBroker.subscribe(run_id, after_seq)
+      error -> error
+    end
+  end
+
+  defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_reason(reason), do: to_string(reason)
+
+  defp mark_event_source(events, source) do
+    Enum.map(events, &Map.put(&1, "source", source))
+  end
+
+  defp last_event_seq([]), do: 0
+  defp last_event_seq(events), do: events |> List.last() |> value(:seq) || 0
+
   defp format_event(event) do
     [
       "[#{value(event, :timestamp)}]",
       value(event, :type),
+      maybe_text("seq", value(event, :seq)),
+      maybe_text("source", value(event, :source)),
       maybe_text("task_id", value(event, :task_id)),
       maybe_text("worker_id", value(event, :worker_id)),
       maybe_text("attempt", value(event, :attempt)),

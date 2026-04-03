@@ -468,7 +468,7 @@ defmodule Beamwarden.RunServer do
   end
 
   defp log_event(run_id, event) do
-    Beamwarden.EventStore.append(run_id, event)
+    Beamwarden.LogBroker.append(run_id, event)
   end
 
   defp blank_to_nil(nil), do: nil

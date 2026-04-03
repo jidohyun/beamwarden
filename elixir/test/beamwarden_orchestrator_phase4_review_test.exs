@@ -164,6 +164,64 @@ defmodule BeamwardenOrchestratorPhase4ReviewTest do
     assert File.exists?(Beamwarden.event_path(run_id))
   end
 
+  test "follow_logs degrades explicitly to persisted polling when the broker is unavailable" do
+    run_id = unique_id("phase4-degraded-follow")
+    parent = self()
+
+    on_exit(fn ->
+      send(parent, :release_degraded_worker)
+      stop_run_if_running(run_id)
+      stop_worker_if_running("#{run_id}-worker-1")
+      cleanup_run_artifacts(run_id)
+    end)
+
+    executor = fn task ->
+      send(parent, {:degraded_worker_started, task.task_id, task.attempt})
+
+      receive do
+        :release_degraded_worker -> {:ok, "degraded follow complete"}
+      after
+        1_500 -> {:error, "timed out waiting for degraded worker release"}
+      end
+    end
+
+    assert {:ok, snapshot} =
+             Beamwarden.Orchestrator.start_run("review this repo",
+               run_id: run_id,
+               workers: 1,
+               await_timeout: 50,
+               worker_opts: [executor: executor]
+             )
+
+    [task] = snapshot.tasks
+    task_id = task.task_id
+    assert_receive {:degraded_worker_started, ^task_id, 1}, 1_000
+
+    follower =
+      Task.async(fn ->
+        capture_io(fn ->
+          assert :ok =
+                   Beamwarden.Orchestrator.follow_logs(run_id, &IO.puts/1,
+                     broker: false,
+                     interval_ms: 25,
+                     timeout_ms: 1_500
+                   )
+        end)
+      end)
+
+    Process.sleep(100)
+    send(parent, :release_degraded_worker)
+
+    output = Task.await(follower, 2_000)
+
+    assert output =~ "event_source=degraded-persisted"
+    assert output =~ "follow=history seq="
+    assert output =~ "follow=degraded-persisted reason=broker_disabled"
+    assert output =~ "source=replay"
+    assert output =~ "source=degraded-persisted"
+    assert output =~ "follow=complete status="
+  end
+
   defp stop_run_if_running(run_id) do
     case Registry.lookup(Beamwarden.RunRegistry, run_id) do
       [{pid, _value} | _] -> GenServer.stop(pid, :normal, 1_000)

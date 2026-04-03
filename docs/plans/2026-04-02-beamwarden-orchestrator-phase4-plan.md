@@ -81,6 +81,41 @@ Responsibilities:
 Keep `Beamwarden.EventStore` as the durability boundary.
 The broker is for delivery semantics, not historical storage.
 
+#### Phase 4A broker-first delivery slice
+
+To keep the implementation lane small, Phase 4A should stop at the broker-backed
+`logs --follow` contract and leave lease/recovery work for later steps.
+
+Broker-first boundaries:
+
+- persist every orchestration event before it is published live
+- assign a monotonic per-run `seq` / `event_seq` at the durability boundary
+- let `Beamwarden.LogBroker` replay backlog from a cursor and then fan out live envelopes
+- keep CLI follow semantics local-first; no raw stdout/stderr tail mode or monitor UI
+- degrade explicitly to persisted polling when broker attach is unavailable
+
+Minimal event envelope / cursor contract:
+
+- required fields: `run_id`, `type`, `timestamp`, `persisted_at`, `seq`
+- optional operator fields stay additive: `task_id`, `worker_id`, `attempt`, `summary`, `error`, `reason`
+- replay API shape: `list_since(run_id, seq)` returns persisted envelopes with `seq > cursor`
+- follow output should expose:
+  - `follow=history seq=<n>`
+  - `follow=live broker_node=<node> seq=<n>`
+  - `follow=degraded-persisted reason=<reason> seq=<n>`
+  - `follow=complete|timeout status=<state> seq=<n>`
+- rendered event lines should label delivery origin as `source=replay`, `source=live`, or `source=degraded_poll`
+
+Minimal file plan for this slice:
+
+- `elixir/lib/beamwarden/event_store.ex` — assign/read stable `seq` metadata and `list_since/2`
+- `elixir/lib/beamwarden/log_broker.ex` — per-run backlog + live subscription boundary
+- `elixir/lib/beamwarden/run_server.ex` — publish persisted envelopes to the broker after append
+- `elixir/lib/beamwarden/orchestrator.ex` — switch `logs --follow` to replay/live/degraded semantics
+- `elixir/test/beamwarden_orchestrator_phase3_test.exs` — replay/live handoff regression
+- `elixir/test/beamwarden_orchestrator_phase4_review_test.exs` — degraded follow fallback contract
+- `docs/elixir-orchestrator-operations.md` / `README.md` — operator wording only
+
 ### 2. Model leases explicitly
 
 Add explicit lease metadata to run/task/worker snapshots:

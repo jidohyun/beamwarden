@@ -47,7 +47,7 @@ defmodule Beamwarden.Orchestrator do
 
   def task_list(run_id) do
     with {:ok, snapshot} <- run_snapshot(run_id) do
-      {:ok, value(snapshot, :tasks) || []}
+      {:ok, enrich_tasks(run_id, snapshot, value(snapshot, :tasks) || [])}
     end
   end
 
@@ -154,6 +154,11 @@ defmodule Beamwarden.Orchestrator do
           "[#{value(task, :status)}] #{value(task, :task_id)}",
           "attempt=#{value(task, :attempt) || 1}",
           "worker=#{value(task, :assigned_worker) || "none"}",
+          "assignment_state=#{value(task, :assignment_state) || "unassigned"}",
+          maybe_text("recovery_reason", render_recovery_reason(task)),
+          maybe_text("lease_expires_at", render_lease_expires_at(task)),
+          maybe_text("recovered_from_attempt", render_recovered_from_attempt(task)),
+          maybe_text("recovered_from_worker", render_recovered_from_worker(task)),
           maybe_text("summary", value(task, :result_summary)),
           maybe_text("error", value(task, :error))
         ]
@@ -267,6 +272,119 @@ defmodule Beamwarden.Orchestrator do
   defp maybe_text(_label, ""), do: nil
   defp maybe_text(label, value), do: "#{label}=#{value}"
   defp truthy?(map, key), do: value(map, key) in [true, "true"]
+
+  defp enrich_tasks(run_id, snapshot, tasks) do
+    workers =
+      Beamwarden.WorkerSupervisor.list_workers(run_id: run_id)
+      |> Map.new(fn worker -> {value(worker, :worker_id), worker} end)
+
+    Enum.map(tasks, fn task ->
+      worker = Map.get(workers, value(task, :assigned_worker))
+      decorate_task(task, snapshot, worker)
+    end)
+  end
+
+  defp decorate_task(task, snapshot, worker) do
+    lost_lease_reason = lost_lease_reason(task, snapshot, worker)
+    explicit_recovery_reason = explicit_recovery_reason(task)
+    recovery_reason = lost_lease_reason || explicit_recovery_reason
+    assignment_state = assignment_state(task, lost_lease_reason)
+
+    task
+    |> Map.put(:assignment_state, assignment_state)
+    |> maybe_put(:recovery_reason, recovery_reason)
+    |> maybe_put(:lease_expires_at, lease_expires_at(assignment_state, worker))
+  end
+
+  defp lost_lease_reason(task, snapshot, worker) do
+    assigned_worker = value(task, :assigned_worker)
+
+    cond do
+      value(task, :status) not in ["in_progress", "cancel_requested"] ->
+        nil
+
+      blank?(assigned_worker) ->
+        nil
+
+      truthy?(snapshot, :stale_runtime) ->
+        "daemon_restart"
+
+      is_nil(worker) ->
+        "worker_expired"
+
+      value(worker, :presence) == "persisted" ->
+        "node_down"
+
+      value(worker, :health_state) == "stale" ->
+        "worker_expired"
+
+      true ->
+        nil
+    end
+  end
+
+  defp assignment_state(task, lost_lease_reason) do
+    cond do
+      not is_nil(lost_lease_reason) ->
+        "lost_lease"
+
+      value(task, :status) == "pending" and explicit_recovery_reason(task) == "operator_retry" ->
+        "requeued"
+
+      value(task, :status) == "pending" ->
+        "unassigned"
+
+      value(task, :status) in ["in_progress", "cancel_requested"] ->
+        "leased"
+
+      value(task, :status) in ["completed", "failed", "cancelled"] ->
+        "terminal"
+
+      true ->
+        "unassigned"
+    end
+  end
+
+  defp render_recovery_reason(task) do
+    case value(task, :recovery_reason) do
+      nil -> nil
+      "" -> nil
+      "none" -> nil
+      reason -> reason
+    end
+  end
+
+  defp render_lease_expires_at(task) do
+    if value(task, :assignment_state) == "lost_lease", do: value(task, :lease_expires_at)
+  end
+
+  defp render_recovered_from_attempt(task) do
+    if explicit_recovery_reason(task) == "operator_retry",
+      do: value(task, :recovered_from_attempt)
+  end
+
+  defp render_recovered_from_worker(task) do
+    if explicit_recovery_reason(task) == "operator_retry",
+      do: value(task, :recovered_from_worker_id)
+  end
+
+  defp lease_expires_at("lost_lease", worker), do: value(worker, :heartbeat_timeout_at)
+  defp lease_expires_at(_assignment_state, _worker), do: nil
+
+  defp explicit_recovery_reason(task) do
+    case value(task, :recovery_reason) do
+      nil -> nil
+      "" -> nil
+      "none" -> nil
+      reason -> reason
+    end
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+  defp blank?(nil), do: true
+  defp blank?(""), do: true
+  defp blank?(_value), do: false
 
   defp log_report(run_id, snapshot, events, opts \\ []) do
     active? = Beamwarden.RunServer.running?(run_id)

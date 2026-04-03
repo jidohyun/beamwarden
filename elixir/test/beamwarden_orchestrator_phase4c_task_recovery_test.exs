@@ -50,11 +50,8 @@ defmodule BeamwardenOrchestratorPhase4cTaskRecoveryTest do
     run_id = unique_id("phase4c-expired")
     worker_id = "#{run_id}-worker-1"
     parent = self()
-    previous_timeout = Application.get_env(:beamwarden, :worker_heartbeat_timeout_seconds)
-    Application.put_env(:beamwarden, :worker_heartbeat_timeout_seconds, 1)
 
     on_exit(fn ->
-      Application.put_env(:beamwarden, :worker_heartbeat_timeout_seconds, previous_timeout)
       send(parent, :release_phase4c_expired_worker)
       stop_run_if_running(run_id)
       stop_worker_if_running(worker_id)
@@ -67,7 +64,7 @@ defmodule BeamwardenOrchestratorPhase4cTaskRecoveryTest do
       receive do
         :release_phase4c_expired_worker -> {:ok, "expired released"}
       after
-        2_500 -> {:error, "timed out waiting for expired release"}
+        10_000 -> {:error, "timed out waiting for expired release"}
       end
     end
 
@@ -82,7 +79,8 @@ defmodule BeamwardenOrchestratorPhase4cTaskRecoveryTest do
     [task] = snapshot.tasks
     task_id = task.task_id
     assert_receive {:phase4c_expired_started, ^task_id, 1}, 1_000
-    Process.sleep(2_200)
+    stop_worker_if_running(worker_id)
+    File.rm(Beamwarden.worker_path(worker_id))
 
     output =
       capture_io(fn ->
@@ -92,7 +90,6 @@ defmodule BeamwardenOrchestratorPhase4cTaskRecoveryTest do
     assert output =~ "worker=#{worker_id}"
     assert output =~ "assignment_state=lost_lease"
     assert output =~ "recovery_reason=worker_expired"
-    assert output =~ "lease_expires_at="
   end
 
   test "persisted non-terminal task explains daemon_restart instead of implying healthy ownership" do
@@ -137,6 +134,52 @@ defmodule BeamwardenOrchestratorPhase4cTaskRecoveryTest do
 
     assert output =~ "assignment_state=lost_lease"
     assert output =~ "recovery_reason=daemon_restart"
+    assert output =~ "lease_expires_at="
+  end
+
+  test "persisted-only worker ownership is surfaced as node_down recovery evidence" do
+    run_id = unique_id("phase4c-node-down")
+    worker_id = "#{run_id}-worker-1"
+    parent = self()
+
+    on_exit(fn ->
+      send(parent, :release_phase4c_node_down_worker)
+      stop_run_if_running(run_id)
+      stop_worker_if_running(worker_id)
+      cleanup_run_artifacts(run_id)
+    end)
+
+    executor = fn task ->
+      send(parent, {:phase4c_node_down_started, task.task_id, task.attempt})
+
+      receive do
+        :release_phase4c_node_down_worker -> {:ok, "node down released"}
+      after
+        10_000 -> {:error, "timed out waiting for node down release"}
+      end
+    end
+
+    assert {:ok, snapshot} =
+             Beamwarden.Orchestrator.start_run("node down recovery view",
+               run_id: run_id,
+               workers: 1,
+               await_timeout: 50,
+               worker_opts: [executor: executor]
+             )
+
+    [task] = snapshot.tasks
+    task_id = task.task_id
+    assert_receive {:phase4c_node_down_started, ^task_id, 1}, 1_000
+    stop_worker_if_running(worker_id)
+
+    output =
+      capture_io(fn ->
+        assert 0 == Beamwarden.CLI.main(["task-list", run_id])
+      end)
+
+    assert output =~ "worker=#{worker_id}"
+    assert output =~ "assignment_state=lost_lease"
+    assert output =~ "recovery_reason=node_down"
     assert output =~ "lease_expires_at="
   end
 

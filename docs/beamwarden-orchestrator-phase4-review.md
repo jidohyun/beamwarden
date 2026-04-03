@@ -2,7 +2,7 @@
 
 This note is the review/documentation companion for the **Phase 4 live broker + multi-node lifecycle** slice of the tmux-free Beamwarden orchestrator.
 
-It is grounded in the repository state after the current Phase 3 work:
+It starts from the Phase 3 baseline that existed before the Phase 4A broker landing:
 
 - `Beamwarden.Orchestrator.follow_logs/3` replays persisted event history, emits `follow=streaming`, then polls `Beamwarden.EventStore`
 - `Beamwarden.RunServer` owns local run/task lifecycle transitions and persisted snapshots through `Beamwarden.RunStore`
@@ -25,10 +25,10 @@ That means the operator contract is already more honest than Phase 3 while stayi
 
 ## What is shipped now
 
-The current runtime already establishes the operator contract that Phase 4 must preserve:
+The current runtime now establishes the operator contract that later Phase 4 work must preserve:
 
 1. `mix beamwarden logs <run-id>` is a compact persisted summary view.
-2. `mix beamwarden logs <run-id> --follow` is honest today: it follows newly persisted orchestration events, not raw worker stdout/stderr.
+2. `mix beamwarden logs <run-id> --follow` is honest today: it replays persisted history, then either attaches to live broker delivery or degrades explicitly to persisted polling, without pretending to tail raw worker stdout/stderr.
 3. `worker-list` separates active runtime workers from persisted last-known rows.
 4. `run-status` can already mark persisted active-looking runs as `stale_runtime=true` when the `RunServer` is gone.
 5. cleanup commands are bounded and operator-facing, but still **local-first** rather than cluster lease-aware.

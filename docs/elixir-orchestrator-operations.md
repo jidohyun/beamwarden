@@ -160,7 +160,7 @@ For the concrete Phase 4 implementation-oriented design, see:
 
 ## Review notes for this slice
 
-The Phase 1 runtime already established a good shape for local runs (`RunServer`, `TaskScheduler`, `ExternalWorker`, persisted run/worker snapshots). Phase 3 should preserve that simplicity:
+The Phase 1 runtime already established a good shape for local runs (`RunServer`, `TaskScheduler`, `ExternalWorker`, persisted run/worker snapshots). Phase 4A should preserve that simplicity while making follow semantics more explicit:
 
 - prefer explicit status/source fields over clever inference in CLI output
 - keep retry/cancel semantics visible in persisted state
